@@ -304,13 +304,18 @@ async function sendMessage(chat, input, sendBtn, feed) {
     renderBoard(chat);
   }
 
+  // Wake the AI facilitator (server decides whether to speak; fire-and-forget).
+  callFn('icc-reply', { chat_id: chat.id });
+
   maybeTriggerRecap(chat.id);
 }
 
 async function maybeTriggerRecap(chatId) {
   const feed = el('#chat-feed');
   const count = feed ? feed.querySelectorAll('.icc-msg').length : 0;
-  if (count > 0 && count % 15 === 0) callFn('icc-summarize', { chat_id: chatId });
+  // Early on, recap sooner so the Build Board shows the community evolving fast.
+  const every = count < 30 ? 8 : 15;
+  if (count > 0 && count % every === 0) callFn('icc-summarize', { chat_id: chatId });
 }
 
 function messageNode(m) {
