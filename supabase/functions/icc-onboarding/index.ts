@@ -6,7 +6,7 @@ import { anthropicJSON, MODEL_SMART } from '../_shared/anthropic.ts';
 import { adminClient, postAiMessage } from '../_shared/supabase.ts';
 
 interface Turn { role: 'user' | 'assistant'; content: string; }
-interface Body { chat_id: string; user_id: string; nickname: string; history: Turn[]; }
+interface Body { chat_id: string; user_id: string; nickname: string; history: Turn[]; ui_language?: string; }
 
 interface OnbResult {
   reply: string;          // shown to the user, in their language after turn 1
@@ -22,9 +22,9 @@ people only "bet" an idea they are ready to risk.
 
 Run a SHORT private intro: at most 2-3 exchanges. Ask, briefly and warmly:
 1) their hobbies/interests, 2) what they want to bring to the group, 3) which idea they are ready to "bet".
-Your VERY FIRST message must be in English. From the user's first reply, DETECT their language and
-switch to it for all later replies. Keep replies to 1-2 sentences. Protect anonymity: never ask for
-real name, phone, email or location.
+Speak the user's language from the VERY FIRST message (their chosen UI language code is given below;
+if a reply arrives in a different language, switch to that). Keep replies to 1-2 sentences.
+Protect anonymity: never ask for real name, phone, email or location.
 
 Always respond with ONLY a JSON object, no prose, with keys:
 "reply" (string, your next message to the user, in the right language),
@@ -36,7 +36,7 @@ Always respond with ONLY a JSON object, no prose, with keys:
 Deno.serve(async (req) => {
   const pre = preflight(req); if (pre) return pre;
   try {
-    const { chat_id, user_id, nickname, history = [] } = (await req.json()) as Body;
+    const { chat_id, user_id, nickname, history = [], ui_language } = (await req.json()) as Body;
     if (!chat_id || !user_id) return json({ error: 'missing chat_id/user_id' }, 400);
 
     // Count user turns to nudge completion.
@@ -45,11 +45,13 @@ Deno.serve(async (req) => {
       ? history
       : [{ role: 'user' as const, content: '(user just joined — greet them and begin)' }];
 
+    const langHint = `\n\nUser's chosen UI language code: ${ui_language || 'en'}. Start in this language.`;
+
     let result: OnbResult;
     try {
       result = await anthropicJSON<OnbResult>({
         model: MODEL_SMART,
-        system: SYSTEM + (userTurns >= 3 ? '\n\nThe user has replied 3 times: set done=true now.' : ''),
+        system: SYSTEM + langHint + (userTurns >= 3 ? '\n\nThe user has replied 3 times: set done=true now.' : ''),
         messages,
         max_tokens: 400,
         temperature: 0.6,
@@ -65,7 +67,7 @@ Deno.serve(async (req) => {
         chat_id,
         nickname,
         onboarding_summary: result.summary || null,
-        language: result.language || 'en',
+        language: result.language || ui_language || 'en',
       }, { onConflict: 'user_id,chat_id' });
 
       // Bump participant count to reflect the new member.

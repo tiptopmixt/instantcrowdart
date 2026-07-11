@@ -7,7 +7,7 @@ import { callFn } from './supabase.js';
 import { userId, nickname, emoji, reroll, setRole } from './auth.js';
 import { navigate } from './router.js';
 import { openTerms } from './legal.js';
-import { LANGS, L, setUiLang, hasLang, rankTitle } from './locale.js';
+import { LANGS, L, setUiLang, hasLang, rankTitle, uiLang } from './locale.js';
 import { roles, traits } from './company.js';
 
 // --- Google AdSense 320x50 banner (placeholder id, no popups/interstitials) ---
@@ -71,6 +71,7 @@ export function runOnboarding(chatId) {
       input.disabled = sendBtn.disabled = true;
       const { data, error } = await callFn('icc-onboarding', {
         chat_id: chatId, user_id: userId(), nickname: nickname(), history,
+        ui_language: uiLang(),
       });
       input.disabled = sendBtn.disabled = false;
       if (error || !data) { addBubble('ai', 'Assistant is busy, please try again.'); return; }

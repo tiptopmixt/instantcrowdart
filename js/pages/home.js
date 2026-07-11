@@ -1,6 +1,7 @@
 // Landing = the fire. A full-screen living ember swarm, a cinematic countdown,
 // a frosted "peek" at the crowd talking, and one giant way in. FOMO by design.
 import { h, el, joinUrl } from '../utils.js';
+import { t } from '../i18n.js';
 import { getActiveChat, getHallOfFame } from '../data.js';
 import { subscribePresence, unsubscribePresence } from '../realtime.js';
 import {
@@ -91,7 +92,10 @@ export async function renderHome(root) {
   const curFlag = (LANGS.find((l) => l.code === uiLang()) || LANGS[0]).flag;
   const langChip = h('button', { class: 'icc-link' }, curFlag + ' ▾');
   langChip.addEventListener('click', async () => { await languageGate(true); location.reload(); });
-  root.appendChild(h('div', { class: 'icc-footer' }, [langChip, termsLink()]));
+  root.appendChild(h('div', { class: 'icc-footer' }, [
+    langChip, termsLink(),
+    h('span', { class: 'icc-muted small' }, t('footerLine')),
+  ]));
   root.appendChild(adsBanner());
 
   document.body.appendChild(feedbackButton());

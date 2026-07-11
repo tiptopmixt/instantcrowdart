@@ -327,8 +327,8 @@ function messageNode(m) {
   else if (!mine) node.appendChild(h('div', { class: 'icc-msg-avatar icc-emoji-avatar' }, emojiOf(m.nickname)));
 
   const bubble = h('div', { class: 'icc-bubble' });
-  if (!mine) bubble.appendChild(h('div', { class: 'icc-msg-nick' }, m.is_ai ? 'AI Facilitator' : `${emojiOf(m.nickname)} ${m.nickname || 'anon'}`));
-  if (m.is_pinned) bubble.appendChild(h('div', { class: 'icc-pin-label' }, '📌 recap'));
+  if (!mine) bubble.appendChild(h('div', { class: 'icc-msg-nick' }, m.is_ai ? t('aiName') : `${emojiOf(m.nickname)} ${m.nickname || 'anon'}`));
+  if (m.is_pinned) bubble.appendChild(h('div', { class: 'icc-pin-label' }, '📌 ' + t('recapLabel')));
   bubble.appendChild(h('div', { class: 'icc-msg-text', html: escapeHtml(m.content).replace(/\n/g, '<br>') }));
 
   const actions = h('div', { class: 'icc-msg-actions' });
