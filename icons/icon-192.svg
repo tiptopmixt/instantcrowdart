@@ -1,0 +1,24 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="InstantCrowdChat">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1c1c22"/>
+      <stop offset="1" stop-color="#101014"/>
+    </linearGradient>
+    <linearGradient id="bolt" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFE24D"/>
+      <stop offset="1" stop-color="#FFD600"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="180" fill="#FFD600" opacity="0.10"/>
+  <path d="M300 70 L150 300 H235 L210 442 L400 205 H288 L350 70 Z"
+        fill="url(#bolt)" stroke="#111" stroke-width="14" stroke-linejoin="round"/>
+  <circle cx="245" cy="240" r="26" fill="#111"/>
+  <circle cx="312" cy="212" r="26" fill="#111"/>
+  <circle cx="253" cy="232" r="9" fill="#fff"/>
+  <circle cx="320" cy="204" r="9" fill="#fff"/>
+  <path d="M240 288 q36 30 74 0" fill="none" stroke="#111" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="120" cy="150" r="13" fill="#FF5252"/>
+  <circle cx="404" cy="330" r="13" fill="#69F0AE"/>
+  <circle cx="140" cy="392" r="13" fill="#40C4FF"/>
+</svg>

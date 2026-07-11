@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#07070b" />
+  <title>InstantCrowdChat — 24 hours. Then it's gone.</title>
+  <meta name="description" content="One chat. 24 hours. Then it's gone. A living crowd of strangers building something wild before the fire burns out." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;700;900&display=swap" rel="stylesheet" />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.svg" />
+  <link rel="stylesheet" href="./css/styles.css" />
+  <!-- Google AdSense loader (placeholder). TODO: replace client id before launch. -->
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXX"
+          crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="app" class="icc-app"><!-- rendered by JS --></div>
+  <script>
+    // Self-healing boot: if a stale service-worker cache serves a broken module
+    // mix (blank page), wipe caches + SW registrations and reload — once.
+    (function () {
+      var KEY = 'icc_recovered';
+      function recover() {
+        if (sessionStorage.getItem(KEY)) return;
+        sessionStorage.setItem(KEY, '1');
+        var jobs = [];
+        if ('serviceWorker' in navigator) {
+          jobs.push(navigator.serviceWorker.getRegistrations()
+            .then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }));
+        }
+        if (window.caches) {
+          jobs.push(caches.keys()
+            .then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }));
+        }
+        Promise.all(jobs).then(function () { location.reload(); });
+      }
+      // Only OUR script/module errors trigger recovery (ignore blocked ads etc.).
+      window.addEventListener('error', function (e) {
+        var t = e.target;
+        if (t && t.tagName === 'SCRIPT' && t.src && t.src.indexOf(location.origin) === 0) return recover();
+        if (e.filename && e.filename.indexOf(location.origin) === 0 && e.filename.indexOf('/js/') !== -1) return recover();
+      }, true);
+      // Watchdog: app never rendered anything after 5s → recover.
+      setTimeout(function () {
+        var app = document.getElementById('app');
+        var hasUi = (app && app.children.length > 0) || document.querySelector('.icc-modal-overlay');
+        if (!hasUi) recover();
+      }, 5000);
+    })();
+  </script>
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
