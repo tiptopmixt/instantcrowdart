@@ -10,7 +10,7 @@ import { anthropic, MODEL_SMART } from '../_shared/anthropic.ts';
 import { adminClient, postAiMessage } from '../_shared/supabase.ts';
 
 // Keep in sync with js/config.js ADMIN_USER_ID.
-const ADMIN_USER_ID = '0daa4226-a50a-4913-b14f-acc1ede94ea9';
+const ADMIN_USER_ID = 'a4069912-2c8a-49f3-96d6-047d2adf8b2d'; // Swift Dolphin 39 (owner)
 const RATING_WINDOW_MS = 60 * 60 * 1000; // 1h to collect final ratings
 const HOF_MIN_VOTERS = 5;
 const HOF_MIN_AVG = 8;
