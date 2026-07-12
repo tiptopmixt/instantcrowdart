@@ -80,6 +80,7 @@ export async function renderHome(root) {
   root.appendChild(h('div', { class: 'icc-footer' }, [
     langChip, termsLink(),
     h('span', { class: 'icc-muted small' }, t('footerLine')),
+    h('div', { class: 'icc-muted small', style: 'margin-top:6px' }, '© 2026 Borzin Roman · All rights reserved'),
   ]));
   root.appendChild(adsBanner());
 
