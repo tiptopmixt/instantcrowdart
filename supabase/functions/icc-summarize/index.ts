@@ -51,29 +51,34 @@ Deno.serve(async (req) => {
       .select('nickname, content, is_ai')
       .eq('chat_id', chat_id).order('created_at', { ascending: false }).limit(40);
     const { data: profiles } = await sb.from('icc_profiles')
-      .select('nickname, language, onboarding_summary').eq('chat_id', chat_id);
+      .select('language, position').eq('chat_id', chat_id);
 
     const langs = (profiles ?? []).map((p) => p.language).filter(Boolean) as string[];
     const dominant = mode(langs) || 'en';
     const conversation = (recent ?? []).reverse()
-      .map((m) => `${m.is_ai ? 'AI' : m.nickname}: ${m.content}`).join('\n');
-    const intros = (profiles ?? [])
-      .map((p) => `- ${p.nickname} (${p.language}): ${p.onboarding_summary ?? ''}`).join('\n');
+      .map((m) => `${m.is_ai ? 'AI' : 'USER'}: ${m.content}`).join('\n');
+    // Anonymous: summarize by AREA counts, never by name.
+    const areaCounts: Record<string, number> = {};
+    (profiles ?? []).forEach((p) => { const a = (p.position || '').trim(); if (a) areaCounts[a] = (areaCounts[a] || 0) + 1; });
+    const areas = Object.entries(areaCounts).map(([a, n]) => `- ${a}: ${n}`).join('\n')
+      || `- ${(profiles ?? []).length} people, areas not chosen yet`;
 
     const hasGoal = !!chat?.current_goal;
     const system = `You are the facilitator of InstantCrowdChat writing a PINNED recap for the group.
+This is FULLY ANONYMOUS — there are NO names. NEVER invent or use any name/nickname; refer to people
+only as "the group", "someone", counts, or by their chosen AREA. After 24 hours everything closes.
 Dominant language code: ${dominant}. Number of distinct languages: ${new Set(langs).size}.
 ${hasGoal
-  ? `A group goal is already set: "${chat!.current_goal}". Write in COORDINATOR mode: who does what, concrete next steps, progress.`
+  ? `A group goal is already set: "${chat!.current_goal}". Write in COORDINATOR mode: which areas do what, concrete next steps, progress.`
   : `No goal yet. If a clear shared desire has emerged, propose it as the group goal and invite a vote.`}
 Write the recap in the dominant language. If the group is mixed-language, also give a SHORT English version.
-Be concise, warm, energetic. Cover: who is here, main topics, emerging common desires, current progress.
+Be concise, warm, energetic. Cover: how many people, which areas, main topics, emerging common desires, progress.
 Respond with ONLY JSON: {"dominant_language","mixed"(bool),"recap","recap_en","propose_goal"(bool),"goal"}.`;
 
     const result = await anthropicJSON<RecapResult>({
       model: MODEL_SMART,
       system,
-      messages: [{ role: 'user', content: `PARTICIPANTS:\n${intros}\n\nRECENT MESSAGES:\n${conversation}` }],
+      messages: [{ role: 'user', content: `AREAS (counts):\n${areas}\n\nRECENT MESSAGES:\n${conversation}` }],
       max_tokens: 700,
       temperature: 0.5,
     });

@@ -150,10 +150,7 @@ export async function renderChat(root, code) {
 
   // First time here: the assistant opens with THE question (client-side greeting).
   if (!lane.length && !state.over) {
-    feed.appendChild(messageNode({
-      id: 'greet', is_ai: true,
-      content: L('greet').replace('{name}', nickname()),
-    }));
+    feed.appendChild(messageNode({ id: 'greet', is_ai: true, content: L('greet') }));
   }
   feed.scrollTop = feed.scrollHeight;
 
@@ -255,22 +252,22 @@ async function renderBoard(chat) {
     h('div', {}, recap || L('boardEmpty')),
   ]));
 
-  // Who's here and what each wants to do / create / become.
+  // Anonymous rows: each person is just a number + their chosen area.
   if (people.length) {
     const org = h('div', { class: 'icc-org' });
-    people.forEach((p) => org.appendChild(orgNode(p, chat)));
+    people.forEach((p, i) => org.appendChild(orgNode(p, chat, i + 1)));
     board.appendChild(org);
   }
 }
 
-function orgNode(p, chat) {
+function orgNode(p, chat, n) {
   const me = p.user_id === userId();
   const desire = p.position
     ? h('span', { class: 'icc-org-role' }, p.position)
     : (me ? h('span', { class: 'icc-org-role dim' }, '＋ ' + L('editDesire')) : null);
   const node = h('div', { class: 'icc-org-node' + (me ? ' me editable' : '') }, [
     h('span', { class: 'icc-org-dot' }, '•'),
-    h('span', { class: 'icc-org-name' }, (p.nickname || 'anon') + (me ? ` (${L('orgYou')})` : '')),
+    h('span', { class: 'icc-org-name' }, `${L('user')} #${n}` + (me ? ` (${L('orgYou')})` : '')),
     desire,
   ]);
   if (me) { node.title = '✎'; node.addEventListener('click', () => editMyDesire(chat)); }
@@ -441,7 +438,7 @@ async function proposeExtension(chat) {
 async function shareChallenge(chat) {
   toast(L('shareStory') + '…', 'info');
   await shareCard({
-    who: nickname(),
+    who: '',
     role: state.myDesire || '',
     title: chat.title,
     count: state.count || chat.participant_count || 0,
