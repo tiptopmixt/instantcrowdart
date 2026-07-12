@@ -13,6 +13,7 @@ Deno.serve(async (req) => {
     const sb = adminClient();
 
     const nonEmpty = '00000000-0000-0000-0000-000000000000';
+    await sb.from('icc_pixels').delete().neq('id', nonEmpty);
     await sb.from('icc_votes').delete().neq('id', nonEmpty);
     await sb.from('icc_ideas').delete().neq('id', nonEmpty);
     await sb.from('icc_messages').delete().neq('id', nonEmpty);
