@@ -1,6 +1,6 @@
 // InstantCrowdChat service worker — app-shell cache, network-first for the shell.
 // Realtime/Supabase calls always go to network (never cached).
-const CACHE = 'icc-shell-v16';
+const CACHE = 'icc-shell-v17';
 const SHELL = [
   './',
   './index.html',
@@ -49,11 +49,11 @@ self.addEventListener('fetch', (e) => {
       || url.hostname.includes('googlesyndication') || url.hostname.includes('anthropic')) {
     return; // let it hit the network directly
   }
-  // App shell: NETWORK-FIRST so a new deploy can never mix stale/new modules
-  // (a stale mix breaks the whole ES-module graph → blank page). The cache is
-  // only a fallback for offline use.
+  // App shell: NETWORK-FIRST and bypass the browser HTTP cache (cache:'reload'),
+  // so a new deploy can never mix stale/new ES modules (which would break the
+  // whole module graph). Our own cache is only an offline fallback.
   e.respondWith(
-    fetch(e.request).then((res) => {
+    fetch(new Request(e.request.url, { cache: 'reload', credentials: 'same-origin' })).then((res) => {
       if (res && res.status === 200) {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(e.request, copy));

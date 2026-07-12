@@ -36,7 +36,7 @@ function wrap(ctx, text, x, y, maxW, lh, maxLines) {
   return y;
 }
 
-export async function buildCardBlob({ who, role, trait, title, recap, crowdEmojis, count, code }) {
+export async function buildCardBlob({ who, role, title, count, code }) {
   const W = 1080, H = 1920;
   const c = document.createElement('canvas');
   c.width = W; c.height = H;
@@ -55,65 +55,57 @@ export async function buildCardBlob({ who, role, trait, title, recap, crowdEmoji
 
   // Brand
   ctx.font = '120px sans-serif';
-  ctx.fillText('⚡', W / 2, 250);
+  ctx.fillText('⚡', W / 2, 260);
   ctx.fillStyle = '#FFD600';
   ctx.font = 'bold 52px sans-serif';
-  ctx.fillText('InstantCrowdChat', W / 2, 330);
+  ctx.fillText('InstantCrowdChat', W / 2, 340);
 
-  // Identity block (the hook: name + position + trait)
+  // Identity block: name + chosen area (localized, no avatars)
   if (who) {
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 84px sans-serif';
-    wrap(ctx, who, W / 2, 520, W - 140, 92, 2);
+    ctx.font = 'bold 82px sans-serif';
+    wrap(ctx, who, W / 2, 560, W - 140, 92, 2);
   }
   if (role) {
     ctx.fillStyle = '#FFD600';
-    ctx.font = 'bold 96px sans-serif';
-    wrap(ctx, role, W / 2, 720, W - 120, 104, 2);
-  }
-  if (trait) {
-    ctx.fillStyle = '#69F0AE';
-    ctx.font = '56px sans-serif';
-    wrap(ctx, '💪 ' + trait, W / 2, 880, W - 160, 66, 2);
+    ctx.font = 'bold 92px sans-serif';
+    wrap(ctx, role, W / 2, 740, W - 120, 100, 2);
   }
 
-  // Card: the company we're building
+  // Card: localized tagline
   let y = 1010;
-  const cardH = 420;
+  const cardH = 360;
   ctx.fillStyle = 'rgba(255,255,255,0.05)';
   roundRect(ctx, 80, y, W - 160, cardH, 40); ctx.fill();
   ctx.strokeStyle = 'rgba(255,214,0,0.5)'; ctx.lineWidth = 3;
   roundRect(ctx, 80, y, W - 160, cardH, 40); ctx.stroke();
   ctx.fillStyle = '#FFD600';
   ctx.font = 'bold 40px sans-serif';
-  ctx.fillText('🏢 ' + (title || 'Our company').toUpperCase().slice(0, 34), W / 2, y + 78);
+  ctx.fillText('🏢 ' + String(title || '').toUpperCase().slice(0, 30), W / 2, y + 90);
   ctx.fillStyle = '#e8e8ee';
-  ctx.font = '42px sans-serif';
-  wrap(ctx, recap || L('rule').split('.')[0] + '.', W / 2, y + 160, W - 240, 58, 4);
-  y += cardH + 90;
+  ctx.font = '46px sans-serif';
+  wrap(ctx, L('cardTagline'), W / 2, y + 180, W - 220, 60, 3);
+  y += cardH + 110;
 
-  // Crowd line
-  ctx.font = '60px sans-serif';
-  ctx.fillText((crowdEmojis || '🦊🐻🦉'), W / 2, y);
+  // Stats (localized)
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 48px sans-serif';
-  ctx.fillText(`${count || 0} inside · building for 24h`, W / 2, y + 74);
+  ctx.fillText(`⚡ ${count || 0} ${L('inside')} · ${L('shareBuilding')}`, W / 2, y);
 
-  // CTA
+  // CTA (localized)
   ctx.fillStyle = '#FFD600';
-  roundRect(ctx, W / 2 - 340, H - 230, 680, 120, 60); ctx.fill();
+  roundRect(ctx, W / 2 - 380, H - 230, 760, 120, 60); ctx.fill();
   ctx.fillStyle = '#111';
-  ctx.font = 'bold 46px sans-serif';
-  ctx.fillText('Join my company 👉 ' + (code || 'FOUND1'), W / 2, H - 155);
+  ctx.font = 'bold 44px sans-serif';
+  ctx.fillText(L('shareCta') + ' ' + (code || 'FOUND1'), W / 2, H - 155);
 
   return await new Promise((res) => c.toBlob(res, 'image/png', 0.92));
 }
 
 export async function shareCard(data) {
   const url = data.url;
-  const text = data.who
-    ? `⚡ I'm ${data.who}${data.role ? ' — ' + data.role : ''}. Join my company: a crowd building something wild in 24h 👇`
-    : `⚡ ${data.title} — a crowd is building something wild in 24h. Come see 👇`;
+  const who = data.who ? `${data.who}${data.role ? ' · ' + data.role : ''} — ` : '';
+  const text = `${who}${L('shareText')}`;
   try {
     const blob = await buildCardBlob(data);
     const file = new File([blob], 'instantcrowdchat.png', { type: 'image/png' });

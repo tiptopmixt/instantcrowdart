@@ -13,7 +13,7 @@ import { isAdmin } from '../config.js';
 import { userId } from '../auth.js';
 import { callFn } from '../supabase.js';
 import { startFX, ignite } from '../fx.js';
-import { nicknamesFromPresence, bestiary } from '../crowd.js';
+import { nicknamesFromPresence } from '../crowd.js';
 
 let timer = null;
 let ghostTimer = null;
@@ -171,15 +171,12 @@ function enterFlow(chat) {
 }
 
 // ---------- ticker ----------
-function updateTicker(chat, online, nicks) {
+function updateTicker(chat, online) {
   const t = el('#home-ticker');
   if (!t) return;
-  const groups = bestiary(nicks).slice(0, 5)
-    .map((g) => `${g.emoji}×${g.count}`).join(' ');
   const bits = [
-    `⚡ ${online} online`,
+    `⚡ ${online} ${L('onlineShort')}`,
     `👥 ${chat.participant_count ?? 0} ${L('inside')}`,
-    groups || '🦊 🐻 🦉',
     `🏷️ ${chat.title}`,
   ];
   const line = bits.join('  ·  ') + '  ·  ';

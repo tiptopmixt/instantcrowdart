@@ -12,18 +12,19 @@ import {
   recordReferrer, getCrewCount, getOrgProfiles, updateDesire,
 } from '../data.js';
 import { subscribeMessages, unsubscribeMessages, subscribePresence, unsubscribePresence } from '../realtime.js';
-import { adsBanner, feedbackButton, adminButton, modal } from '../components.js';
+import { adsBanner, modal, openFeedbackFlow, openAdminPanel } from '../components.js';
 import { callFn } from '../supabase.js';
-import { userId, nickname, emojiOf } from '../auth.js';
+import { userId, nickname } from '../auth.js';
+import { isAdmin } from '../config.js';
 import { navigate, getQueryParam } from '../router.js';
 import { requireConsent } from '../legal.js';
 import { L, rankTitle, uiLang } from '../locale.js';
 import { departments } from '../company.js';
-import { renderCrowd, nicknamesFromPresence, bestiary } from '../crowd.js';
+import { renderCrowd, nicknamesFromPresence } from '../crowd.js';
 import { shareCard } from '../share-card.js';
 
 let timer = null;
-let state = { chat: null, blocked: false, over: false, crowdEmojis: '🦊🐻🦉', count: 0, myDesire: '' };
+let state = { chat: null, blocked: false, over: false, count: 0, myDesire: '' };
 
 function isOver(chat) {
   return chat.status === 'closed' || (chat.status !== 'founding' && isExpired(chat.expires_at));
@@ -51,10 +52,20 @@ export async function renderChat(root, code) {
     chat.status === 'founding' ? '∞' : formatRemaining(chat.expires_at));
   const shareBtn = h('button', { class: 'icc-share-cta', title: L('shareStory') }, ['📤 ', L('share')]);
   shareBtn.addEventListener('click', () => shareChallenge(chat));
+  // Admin + Feedback as small icons in the top bar (never over the input box).
+  const tools = [];
+  if (isAdmin(userId())) {
+    const a = h('button', { class: 'icc-tool', title: t('adminPanel') }, '⚙︎');
+    a.addEventListener('click', () => openAdminPanel(chat));
+    tools.push(a);
+  }
+  const fb = h('button', { class: 'icc-tool', title: L('feedback') }, '💬');
+  fb.addEventListener('click', () => openFeedbackFlow());
+  tools.push(fb);
   page.appendChild(h('div', { class: 'icc-topbar' }, [
     h('button', { class: 'icc-link', onclick: () => navigate('/') }, '‹'),
     h('div', { class: 'icc-topbar-title' }, chat.title),
-    countdown, shareBtn,
+    countdown, ...tools, shareBtn,
   ]));
 
   // Burning fuse: the 24h literally burn away across the top of the chat.
@@ -99,9 +110,6 @@ export async function renderChat(root, code) {
   page.appendChild(adsBanner());
 
   root.appendChild(page);
-  document.body.appendChild(feedbackButton());
-  const adminFab = adminButton(chat);
-  if (adminFab) document.body.appendChild(adminFab);
 
   buildQuickReplies(quick, chat, input, sendBtn, feed);
 
@@ -167,11 +175,9 @@ export async function renderChat(root, code) {
   });
   let prevCount = -1;
   subscribePresence(chat.id, (count, pstate) => {
-    const o = el('#chat-online'); if (o) o.textContent = String(count);
     const nicks = nicknamesFromPresence(pstate);
     renderCrowd(el('#chat-crowd'), nicks);
     state.count = count;
-    state.crowdEmojis = bestiary(nicks).slice(0, 4).map((g) => g.emoji).join('') || '🦊🐻🦉';
     if (count !== prevCount) { prevCount = count; renderBoard(chat); refreshRank(chat.id); }
   });
 
@@ -265,7 +271,7 @@ function orgNode(p, chat) {
     ? h('span', { class: 'icc-org-role' }, p.position)
     : (me ? h('span', { class: 'icc-org-role dim' }, '＋ ' + L('editDesire')) : null);
   const node = h('div', { class: 'icc-org-node' + (me ? ' me editable' : '') }, [
-    h('span', { class: 'icc-org-emoji' }, emojiOf(p.nickname)),
+    h('span', { class: 'icc-org-dot' }, '•'),
     h('span', { class: 'icc-org-name' }, (p.nickname || 'anon') + (me ? ` (${L('orgYou')})` : '')),
     desire,
   ]);
@@ -354,10 +360,9 @@ function messageNode(m) {
   const node = h('div', { class: cls, 'data-mid': m.id });
 
   if (m.is_ai) node.appendChild(h('div', { class: 'icc-msg-avatar', html: aiAvatarSVG(30) }));
-  else if (!mine) node.appendChild(h('div', { class: 'icc-msg-avatar icc-emoji-avatar' }, emojiOf(m.nickname)));
 
   const bubble = h('div', { class: 'icc-bubble' });
-  if (!mine) bubble.appendChild(h('div', { class: 'icc-msg-nick' }, m.is_ai ? t('aiName') : `${emojiOf(m.nickname)} ${m.nickname || 'anon'}`));
+  if (!mine) bubble.appendChild(h('div', { class: 'icc-msg-nick' }, m.is_ai ? t('aiName') : (m.nickname || 'anon')));
   bubble.appendChild(h('div', { class: 'icc-msg-text', html: escapeHtml(m.content).replace(/\n/g, '<br>') }));
 
   const actions = h('div', { class: 'icc-msg-actions' });
@@ -443,14 +448,10 @@ async function proposeExtension(chat) {
 // --- Share (image card for Instagram stories) ---
 async function shareChallenge(chat) {
   toast(L('shareStory') + '…', 'info');
-  const recap = await latestRecapText(chat.id, 220);
   await shareCard({
-    who: `${emojiOf(nickname())} ${nickname()}`,
+    who: nickname(),
     role: state.myDesire || '',
-    trait: '',
     title: chat.title,
-    recap,
-    crowdEmojis: state.crowdEmojis,
     count: state.count || chat.participant_count || 0,
     code: chat.short_code,
     url: joinUrl(chat.short_code) + '?r=' + (userId() || ''),
@@ -469,7 +470,7 @@ function cleanup() {
   clearInterval(timer);
   unsubscribeMessages();
   unsubscribePresence();
-  state = { chat: null, blocked: false, over: false, crowdEmojis: '🦊🐻🦉', count: 0, myDesire: '' };
+  state = { chat: null, blocked: false, over: false, count: 0, myDesire: '' };
   els('.icc-fab').forEach((n) => n.remove());
   els('.icc-admin-fab').forEach((n) => n.remove());
 }

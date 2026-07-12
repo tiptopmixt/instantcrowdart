@@ -1,6 +1,6 @@
 // Data-access helpers around Supabase tables (icc_*).
 import { sb } from './supabase.js';
-import { userId, nickname, position, trait } from './auth.js';
+import { userId, nickname } from './auth.js';
 
 export async function getActiveChat() {
   // Prefer an active/extended/founding chat (there is only one at a time).
@@ -64,16 +64,6 @@ export async function recordReferrer(chatId, referrerId) {
       .eq('user_id', userId()).eq('chat_id', chatId)
       .is('referrer_id', null); // only set once
   } catch { /* column may not exist yet */ }
-}
-
-// Write my chosen position + trait onto my profile (best-effort; needs the org columns).
-export async function updateRole(chatId) {
-  if (!position() && !trait()) return;
-  try {
-    await sb.from('icc_profiles')
-      .update({ position: position(), trait: trait() })
-      .eq('user_id', userId()).eq('chat_id', chatId);
-  } catch { /* columns may not exist yet */ }
 }
 
 // Save what this user would like to do/create/become (their area on the board).

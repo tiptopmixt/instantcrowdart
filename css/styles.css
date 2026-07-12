@@ -229,16 +229,23 @@ body { min-height: 100dvh; }
 
 /* --- Clear Share CTA --- */
 .icc-share-cta { display: inline-flex; align-items: center; gap: 2px; background: var(--yellow); color: #111; border: none; border-radius: 999px; padding: 8px 14px; font-size: 14px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 14px rgba(255,214,0,.35); white-space: nowrap; }
+.icc-tool { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%; background: var(--bg-3); border: 1px solid var(--line); color: var(--text); font-size: 16px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.icc-tool:hover { border-color: var(--yellow); }
+.icc-org-dot { color: var(--yellow); font-size: 18px; line-height: 1; }
 
 /* --- Head row (flags + crowd) --- */
 .icc-headrow { display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-bottom: 1px solid var(--line); overflow-x: auto; }
 .icc-headrow .icc-flags { border: 0; padding: 0; background: none; position: static; min-height: 0; }
 .icc-headrow .icc-crowd { padding: 0; }
 
-/* --- Split: Build Board + chat --- */
+/* --- Split: shared board (50%) + private lane (50%) --- */
 .icc-split { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.icc-board { max-height: 36dvh; overflow-y: auto; padding: 12px 14px; background: linear-gradient(180deg, rgba(255,214,0,.06), transparent); border-bottom: 2px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
-.icc-board-head { display: flex; align-items: center; gap: 8px; }
+.icc-board { flex: 1 1 50%; min-height: 0; overflow-y: auto; padding: 12px 14px; background: linear-gradient(180deg, rgba(255,214,0,.06), transparent); border-bottom: 2px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+.icc-lane { flex: 1 1 50%; min-height: 0; display: flex; flex-direction: column; }
+.icc-lane-label { flex: 0 0 auto; font-size: 11px; font-weight: 700; color: var(--muted); padding: 6px 12px 2px; background: var(--bg); border-bottom: 1px solid var(--line); }
+.icc-lane .icc-feed { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.icc-board-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.icc-board-sub { font-size: 10px; color: var(--muted); }
 .icc-board-head strong { font-size: 15px; }
 .icc-live { font-size: 10px; font-weight: 800; color: var(--red); letter-spacing: 1px; animation: livepulse 1.6s ease-in-out infinite; }
 @keyframes livepulse { 50% { opacity: .35; } }
