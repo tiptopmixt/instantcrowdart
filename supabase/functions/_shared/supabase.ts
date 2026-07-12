@@ -8,18 +8,28 @@ export function adminClient() {
 }
 
 // Post an AI message into a chat (server-side; bypasses the is_ai=false RLS check).
+// recipientId targets a single user's private lane; null = global (recaps, announcements).
+// Falls back to a global insert if the recipient_id column doesn't exist yet.
 export async function postAiMessage(
   sb: ReturnType<typeof adminClient>,
   chatId: string,
   content: string,
   pinned = false,
+  recipientId: string | null = null,
 ) {
-  return await sb.from('icc_messages').insert({
+  const row: Record<string, unknown> = {
     chat_id: chatId,
     user_id: null,
     nickname: 'AI Facilitator',
     content,
     is_ai: true,
     is_pinned: pinned,
-  });
+  };
+  if (recipientId) row.recipient_id = recipientId;
+  let res = await sb.from('icc_messages').insert(row);
+  if (res.error && recipientId) {
+    delete row.recipient_id;
+    res = await sb.from('icc_messages').insert(row);
+  }
+  return res;
 }

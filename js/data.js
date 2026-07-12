@@ -76,6 +76,16 @@ export async function updateRole(chatId) {
   } catch { /* columns may not exist yet */ }
 }
 
+// Save what this user would like to do/create/become (their area on the board).
+// Stored in the `position` column; best-effort if the column is missing.
+export async function updateDesire(chatId, desire) {
+  try {
+    await sb.from('icc_profiles')
+      .update({ position: desire })
+      .eq('user_id', userId()).eq('chat_id', chatId);
+  } catch { /* column may not exist yet */ }
+}
+
 // Profiles with org fields for the live org chart. Falls back if columns are missing.
 export async function getOrgProfiles(chatId) {
   let res = await sb.from('icc_profiles')

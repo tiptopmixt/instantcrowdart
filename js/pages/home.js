@@ -5,33 +5,18 @@ import { t } from '../i18n.js';
 import { getActiveChat, getHallOfFame } from '../data.js';
 import { subscribePresence, unsubscribePresence } from '../realtime.js';
 import {
-  adsBanner, feedbackButton, adminButton, termsLink, languageGate, introGame,
+  adsBanner, feedbackButton, adminButton, termsLink, languageGate,
 } from '../components.js';
 import { L, uiLang, LANGS } from '../locale.js';
 import { navigate } from '../router.js';
 import { isAdmin } from '../config.js';
-import { userId, nickname, position, trait, emojiOf } from '../auth.js';
+import { userId } from '../auth.js';
 import { callFn } from '../supabase.js';
-import { shareCard } from '../share-card.js';
 import { startFX, ignite } from '../fx.js';
 import { nicknamesFromPresence, bestiary } from '../crowd.js';
 
 let timer = null;
 let ghostTimer = null;
-
-const PLAYED_KEY = 'icc_played';
-const played = () => { try { return !!localStorage.getItem(PLAYED_KEY); } catch { return false; } };
-const markPlayed = () => { try { localStorage.setItem(PLAYED_KEY, '1'); } catch { /* ignore */ } };
-
-function inviteUrl(code) { return joinUrl(code) + '?r=' + (userId() || ''); }
-async function inviteCrew(chat) {
-  await shareCard({
-    who: `${emojiOf(nickname())} ${nickname()}`, role: position(), trait: trait(),
-    title: chat.title, recap: chat.current_goal || '',
-    crowdEmojis: '🦊🐻🦉', count: chat.participant_count || 0,
-    code: chat.short_code, url: inviteUrl(chat.short_code),
-  });
-}
 
 export async function renderHome(root) {
   unsubscribePresence();
@@ -181,11 +166,7 @@ function peekButton(chat) {
   return b;
 }
 
-async function enterFlow(chat) {
-  if (!played()) {
-    await introGame(() => inviteCrew(chat));
-    markPlayed();
-  }
+function enterFlow(chat) {
   ignite(() => navigate(`/c/${chat.short_code}`));
 }
 
