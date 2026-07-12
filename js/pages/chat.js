@@ -9,7 +9,7 @@ import { flagsFromLangs } from '../flags.js';
 import {
   getChatByCode, getMyProfile, joinChat, getMessages, getActiveProfiles,
   insertMyMessage, castVote, getVotes, insertIdea,
-  recordReferrer, getCrewCount, getOrgProfiles, updateDesire,
+  recordReferrer, getOrgProfiles, updateDesire,
 } from '../data.js';
 import { subscribeMessages, unsubscribeMessages, subscribePresence, unsubscribePresence } from '../realtime.js';
 import { adsBanner, modal, openFeedbackFlow, openAdminPanel } from '../components.js';
@@ -18,7 +18,7 @@ import { userId, nickname } from '../auth.js';
 import { isAdmin } from '../config.js';
 import { navigate, getQueryParam } from '../router.js';
 import { requireConsent } from '../legal.js';
-import { L, rankTitle, uiLang } from '../locale.js';
+import { L, uiLang } from '../locale.js';
 import { departments } from '../company.js';
 import { renderCrowd, nicknamesFromPresence } from '../crowd.js';
 import { shareCard } from '../share-card.js';
@@ -77,7 +77,6 @@ export async function renderChat(root, code) {
   const flagsBar = h('div', { class: 'icc-flags', id: 'chat-flags', title: t('flagsTooltip') });
   flagsBar.addEventListener('click', () => toast(t('flagsTooltip'), 'info'));
   page.appendChild(h('div', { class: 'icc-headrow' }, [
-    h('span', { class: 'icc-rank-badge', id: 'chat-rank' }),
     flagsBar,
     h('div', { class: 'icc-crowd', id: 'chat-crowd' }),
   ]));
@@ -137,7 +136,6 @@ export async function renderChat(root, code) {
     profile = await getMyProfile(chat.id);
   }
   state.myDesire = profile?.position || '';
-  refreshRank(chat.id);
   if (profile && profile.violations >= 3) {
     state.blocked = true;
     toast(t('blocked'), 'error');
@@ -178,7 +176,7 @@ export async function renderChat(root, code) {
     const nicks = nicknamesFromPresence(pstate);
     renderCrowd(el('#chat-crowd'), nicks);
     state.count = count;
-    if (count !== prevCount) { prevCount = count; renderBoard(chat); refreshRank(chat.id); }
+    if (count !== prevCount) { prevCount = count; renderBoard(chat); }
   });
 
   // Countdown tick + expiry
@@ -380,12 +378,6 @@ async function translateMessage(m, bubble) {
   const { data, error } = await callFn('icc-translate', { message: m.content, user_id: userId() });
   if (error || !data?.translation) { toast('Translation unavailable', 'error'); return; }
   bubble.appendChild(h('div', { class: 'icc-translation' }, '🌐 ' + data.translation));
-}
-
-async function refreshRank(chatId) {
-  const crew = await getCrewCount(chatId);
-  const badge = el('#chat-rank');
-  if (badge) badge.textContent = `👑 ${rankTitle(crew)}` + (crew ? ` · ${crew} ${L('crew')}` : '');
 }
 
 async function refreshFlags(chatId) {

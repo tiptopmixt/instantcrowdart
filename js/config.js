@@ -12,7 +12,8 @@ export const CONFIG = {
 
   // Hardcoded admin user id (Supabase auth uid) allowed to start a new challenge.
   // TODO: replace with your real anonymous/admin user id after first sign-in.
-  ADMIN_USER_ID: 'a4069912-2c8a-49f3-96d6-047d2adf8b2d', // Swift Dolphin 39 (owner, phone)
+  // No in-app admin: everyone is equal. Challenges are managed server-side (CLI/API).
+  ADMIN_USER_ID: '',
 
   // The founding chat short code (seeded in SQL).
   FOUNDING_CODE: 'FOUND1',
