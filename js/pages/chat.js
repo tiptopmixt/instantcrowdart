@@ -8,18 +8,17 @@ import { aiAvatarSVG } from '../mascot.js';
 import { flagsFromLangs } from '../flags.js';
 import {
   getChatByCode, getMyProfile, joinChat, getMessages, getActiveProfiles,
-  insertMyMessage, castVote, getVotes, insertIdea,
-  recordReferrer, getOrgProfiles, updateDesire,
+  insertMyMessage, castVote, getVotes, insertIdea, getIdeas, upvoteIdea,
+  recordReferrer,
 } from '../data.js';
 import { subscribeMessages, unsubscribeMessages, subscribePresence, unsubscribePresence } from '../realtime.js';
-import { adsBanner, modal, openFeedbackFlow, openAdminPanel } from '../components.js';
+import { adsBanner, openFeedbackFlow, openAdminPanel } from '../components.js';
 import { callFn } from '../supabase.js';
 import { userId, nickname } from '../auth.js';
 import { isAdmin } from '../config.js';
 import { navigate, getQueryParam } from '../router.js';
 import { requireConsent } from '../legal.js';
 import { L, uiLang } from '../locale.js';
-import { departments } from '../company.js';
 import { renderCrowd, nicknamesFromPresence } from '../crowd.js';
 import { shareCard } from '../share-card.js';
 
@@ -201,97 +200,63 @@ export async function renderChat(root, code) {
   refreshVoteBanner(chat);
 }
 
-// --- Quick chips = pick your area of the company (tap to set it), plus an idea spark ---
+// --- Quick chips: actions that shape the ONE shared objective ---
 function buildQuickReplies(container, chat, input, sendBtn, feed) {
   container.innerHTML = '';
-  // Department chips: tap = "I'd like to work in X" → sets your area + tells the assistant.
-  departments().forEach((dep) => {
-    const b = h('button', { class: 'icc-chip' }, dep);
-    b.addEventListener('click', async () => {
-      state.myDesire = dep;
-      await updateDesire(chat.id, dep);
-      renderBoard(chat);
-      input.value = `${L('wantArea')} ${dep}`;
-      await sendMessage(chat, input, sendBtn, feed);
-    });
+  const starter = (text) => () => { input.value = text; input.focus(); };
+  const send = (text) => async () => { input.value = text; await sendMessage(chat, input, sendBtn, feed); };
+  const chips = [
+    { label: L('qrIdea'), on: starter('💡 ') },
+    { label: L('qrObjective'), on: starter(L('starterObjective')) },
+    { label: L('qrHelp'), on: send(L('starterHelp')) },
+    { label: '+24h', on: () => proposeExtension(chat) },
+  ];
+  chips.forEach((c) => {
+    const b = h('button', { class: 'icc-chip' }, c.label);
+    b.addEventListener('click', c.on);
     container.appendChild(b);
   });
-  // Idea spark (starts a 💡 message that pins on the board).
-  const idea = h('button', { class: 'icc-chip' }, L('qrIdea'));
-  idea.addEventListener('click', () => { input.value = '💡 '; input.focus(); });
-  container.appendChild(idea);
 }
 
-// --- SHARED board: the collective picture everyone sees ---
+// --- SHARED board: the ONE common objective, taking shape from everyone's chats ---
 async function renderBoard(chat) {
   const board = el('#chat-board');
   if (!board) return;
 
   const { chat: fresh } = await getChatByCode(chat.short_code);
   const goal = fresh?.current_goal;
-  const recap = await latestRecapText(chat.id, 220);
-  const people = await getOrgProfiles(chat.id);
+  const ideas = (await getIdeas()).slice(0, 8); // contributions shaping it
+  const stateLabel = goal ? L('stateSet') : (ideas.length ? L('stateDev') : L('stateTodo'));
 
   board.innerHTML = '';
   board.appendChild(h('div', { class: 'icc-board-head' }, [
     h('span', { class: 'icc-live' }, '● ' + L('boardLive')),
-    h('strong', {}, '🏢 ' + L('org') + ` · ${people.length}`),
-    h('span', { class: 'icc-board-sub' }, '👁 ' + L('boardPublic')),
+    h('strong', {}, '🎯 ' + L('objBoard')),
+    h('span', { class: 'icc-board-sub' }, '· ' + stateLabel),
   ]));
 
-  if (goal) {
-    board.appendChild(h('div', { class: 'icc-board-goal' }, [
-      h('span', { class: 'icc-board-tag' }, '🎯 ' + L('boardGoal')),
-      h('span', {}, goal),
+  // The one shared objective (big, evolving)
+  board.appendChild(h('div', { class: 'icc-objective' + (goal ? ' set' : '') }, goal || L('objTodo')));
+
+  // Contributions: the live, mutating list everyone shapes and boosts
+  const list = h('div', { class: 'icc-board-ideas' });
+  list.appendChild(h('div', { class: 'icc-board-tag' }, '💡 ' + L('contribs') + ` · ${ideas.length}`));
+  ideas.forEach((i) => {
+    const boost = h('button', { class: 'icc-boost' }, `▲ ${i.votes ?? 0}`);
+    boost.addEventListener('click', async () => {
+      boost.disabled = true;
+      const { error } = await upvoteIdea(i.id);
+      if (!error) { i.votes = (i.votes ?? 0) + 1; boost.textContent = `▲ ${i.votes}`; }
+      boost.disabled = false;
+    });
+    list.appendChild(h('div', { class: 'icc-board-idea' }, [
+      h('span', { class: 'icc-board-idea-text' }, i.idea_summary), boost,
     ]));
-  }
+  });
+  board.appendChild(list);
 
-  // The collective recap = what we're building together (from everyone's private input).
-  board.appendChild(h('div', { class: 'icc-board-recap' }, [
-    h('span', { class: 'icc-board-tag' }, '⚡ ' + L('board')),
-    h('div', {}, recap || L('boardEmpty')),
-  ]));
-
-  // Anonymous rows: each person is just a number + their chosen area.
-  if (people.length) {
-    const org = h('div', { class: 'icc-org' });
-    people.forEach((p, i) => org.appendChild(orgNode(p, chat, i + 1)));
-    board.appendChild(org);
-  }
-}
-
-function orgNode(p, chat, n) {
-  const me = p.user_id === userId();
-  const desire = p.position
-    ? h('span', { class: 'icc-org-role' }, p.position)
-    : (me ? h('span', { class: 'icc-org-role dim' }, '＋ ' + L('editDesire')) : null);
-  const node = h('div', { class: 'icc-org-node' + (me ? ' me editable' : '') }, [
-    h('span', { class: 'icc-org-dot' }, '•'),
-    h('span', { class: 'icc-org-name' }, `${L('user')} #${n}` + (me ? ` (${L('orgYou')})` : '')),
-    desire,
-  ]);
-  if (me) { node.title = '✎'; node.addEventListener('click', () => editMyDesire(chat)); }
-  return node;
-}
-
-// Tap your own row → rewrite what you'd like to do/create/become (evolves anytime).
-function editMyDesire(chat) {
-  const input = h('input', { class: 'icc-onb-input', placeholder: L('editDesirePh'), maxlength: '60', value: state.myDesire || '' });
-  const ok = h('button', { class: 'icc-btn' }, 'OK');
-  const body = h('div', { class: 'icc-custom-row', style: 'padding:16px' }, [input, ok]);
-  const m = modal(L('editDesire'), body);
-  const save = async () => {
-    const v = input.value.trim();
-    if (!v) return;
-    m.close();
-    state.myDesire = v;
-    await updateDesire(chat.id, v);
-    renderBoard(chat);
-    toast('✅ ' + v, 'ok');
-  };
-  ok.addEventListener('click', save);
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') save(); });
-  setTimeout(() => input.focus(), 60);
+  board.appendChild(h('div', { class: 'icc-board-crowd' },
+    `👥 ${state.count || chat.participant_count || 0} · ${L('building')}`));
 }
 
 async function sendMessage(chat, input, sendBtn, feed) {
@@ -325,21 +290,13 @@ async function sendMessage(chat, input, sendBtn, feed) {
     renderBoard(chat);
   }
 
-  // The private assistant answers in MY lane (server decides; fire-and-forget).
+  // The private assistant answers in MY lane and may add a contribution / shape the
+  // shared objective → refresh the board so everyone sees it mutate.
   callFn('icc-reply', { chat_id: chat.id, user_id: userId() }).then(() => {
-    // The assistant may have extracted my desire — refresh the shared board.
-    setTimeout(() => { refreshMyDesire(chat); }, 800);
+    setTimeout(() => renderBoard(chat), 900);
   });
 
   maybeTriggerRecap(chat.id);
-}
-
-async function refreshMyDesire(chat) {
-  const p = await getMyProfile(chat.id);
-  if (p && p.position && p.position !== state.myDesire) {
-    state.myDesire = p.position;
-    renderBoard(chat);
-  }
 }
 
 async function maybeTriggerRecap(chatId) {

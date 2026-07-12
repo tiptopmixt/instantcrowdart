@@ -2,7 +2,7 @@
 import { ensureAuth } from './auth.js';
 import { route, startRouter } from './router.js';
 import { renderHome } from './pages/home.js';
-import { renderChat } from './pages/chat.js';
+import { renderExperiment } from './pages/experiment.js';
 import { renderWall } from './pages/wall.js';
 import { toast } from './utils.js';
 import { languageGate } from './components.js';
@@ -11,7 +11,7 @@ import { L } from './locale.js';
 const app = document.getElementById('app');
 
 route('/', () => renderHome(app));
-route('/c/:code', ({ code }) => renderChat(app, code));
+route('/c/:code', ({ code }) => renderExperiment(app, code));
 route('/wall', () => renderWall(app));
 
 function setBanner() {

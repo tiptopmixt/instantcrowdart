@@ -173,6 +173,26 @@ export async function upvoteIdea(ideaId) {
   return { error };
 }
 
+// --- Pixel Art ---
+export async function getPixels(chatId) {
+  const { data } = await sb.from('icc_pixels')
+    .select('id, user_id, x, y, color').eq('chat_id', chatId);
+  return data || [];
+}
+export async function placePixel(chatId, x, y, color) {
+  const { data, error } = await sb.from('icc_pixels')
+    .insert({ chat_id: chatId, user_id: userId(), x, y, color }).select().maybeSingle();
+  return { pixel: data, error };
+}
+export async function movePixel(id, x, y) {          // anyone can move any pixel
+  const { error } = await sb.from('icc_pixels').update({ x, y }).eq('id', id);
+  return { error };
+}
+export async function removePixel(id) {              // only your own
+  const { error } = await sb.from('icc_pixels').delete().eq('id', id).eq('user_id', userId());
+  return { error };
+}
+
 // --- Hall of Fame ---
 export async function getHallOfFame() {
   const { data } = await sb.from('icc_hall_of_fame').select('*').order('created_at', { ascending: false });

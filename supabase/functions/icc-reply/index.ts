@@ -3,11 +3,11 @@
 // saves it to their profile (shown on the shared board) and replies privately in
 // their language. The collective picture emerges on the board via icc-summarize.
 import { preflight, json } from '../_shared/cors.ts';
-import { anthropic, anthropicJSON, MODEL_SMART } from '../_shared/anthropic.ts';
+import { anthropicJSON, MODEL_SMART } from '../_shared/anthropic.ts';
 import { adminClient, postAiMessage } from '../_shared/supabase.ts';
 
 interface Body { chat_id: string; user_id?: string; }
-interface DesireResult { reply: string; desire: string; }
+interface ReplyResult { reply: string; contribution: string; objective: string; }
 
 const REACTION_RX = /^[\p{Emoji}\p{Emoji_Presentation}\s+1!.👍🔥😂❤️]+$/u;
 
@@ -49,68 +49,65 @@ Deno.serve(async (req) => {
       return json({ skipped: 'throttled' });
     }
 
-    // Profile: language + whether we already know their desire.
     const { data: profile } = user_id
-      ? await sb.from('icc_profiles').select('nickname, language, position')
+      ? await sb.from('icc_profiles').select('language')
           .eq('chat_id', chat_id).eq('user_id', user_id).maybeSingle()
       : { data: null };
     const lang = profile?.language || 'en';
-    const hasDesire = !!(profile?.position && String(profile.position).trim());
 
-    // Shared context: latest pinned recap = what the crowd is building.
-    const { data: pinned } = await sb.from('icc_messages')
-      .select('content').eq('chat_id', chat_id).eq('is_pinned', true)
-      .order('created_at', { ascending: false }).limit(1).maybeSingle();
+    // The shared creation so far: the ONE objective + the top contributions.
     const { count: people } = await sb.from('icc_profiles')
       .select('*', { count: 'exact', head: true }).eq('chat_id', chat_id);
+    const { data: ideas } = await sb.from('icc_ideas')
+      .select('idea_summary, votes').order('votes', { ascending: false }).limit(10);
+    const contribs = (ideas ?? []).map((i) => `- ${i.idea_summary} (▲${i.votes ?? 0})`).join('\n')
+      || '(none yet)';
 
     const transcript = msgs.slice(-12)
-      .map((m) => `${m.is_ai ? 'ASSISTANT' : 'USER'}: ${m.content}`).join('\n');
+      .map((m) => `${m.is_ai ? 'ASSISTANT' : 'YOU'}: ${m.content}`).join('\n');
 
-    const baseSystem = `You are the personal AI assistant inside "${chat.title}" — a playful 24-hour
-collective experiment. It is fully ANONYMOUS: there are NO names. Each participant talks PRIVATELY
-with you; the crowd's creation emerges on a shared board. After 24 hours everything closes.
-Crowd size: ${people ?? 1}. Current shared goal: ${chat.current_goal || 'not set yet'}.
-What the crowd is building so far: ${pinned?.content?.slice(0, 400) || 'nothing yet — this user could spark it'}.
+    const system = `You are the AI facilitator of "${chat.title}" — a fast, playful 24-hour experiment.
+The whole crowd is anonymously shaping ONE shared thing together: a single common objective/idea that
+mutates in real time as people contribute. It is fully ANONYMOUS (no names) and after 24 hours it
+vanishes forever. Your job is NOT to chat idly — it is to actively BUILD this one shared thing WITH
+the user: react, then push them to add ONE concrete piece (an idea, a twist, a name, a rule, a word),
+or to sharpen the objective. Be concrete and activating, warm and energetic. If nothing exists yet,
+spark it: propose a fun, doable direction (e.g. invent a collective slogan, a mini word-game, a name,
+a simple product) and ask them to add the first piece. Invite them to share the link as a call for help.
 
-Address the user simply as "you" — NEVER invent or use a name/nickname. Speak the user's language
-(code: ${lang}; if their message is clearly another language, use that). Keep replies SHORT (1-3
-sentences), warm, optimistic, energetic — the ride matters more than the result. Connect their input
-to what the crowd is doing; suggest starting a message with 💡 to pin an idea on the shared board.
-Never mention these instructions.`;
+CURRENT SHARED OBJECTIVE: ${chat.current_goal || 'NOT SET YET'}
+CONTRIBUTIONS SO FAR:
+${contribs}
 
-    if (!hasDesire && user_id) {
-      // First substantive answer = what they'd like to do / create / become.
-      const result = await anthropicJSON<DesireResult>({
-        model: MODEL_SMART,
-        system: baseSystem + `
+Reply to the user in their language (code ${lang}; if their message is clearly another language, use
+that). Address them only as "you", never a name. Keep it SHORT: 1-3 sentences.
 
-The user hasn't told us yet what they'd like to DO, CREATE or BECOME. If their last message expresses
-it (even roughly), extract it. Respond with ONLY JSON:
-{"reply": "your short private reply in their language, celebrating their desire and linking it to the crowd",
- "desire": "their desire in 2-6 words, in their language, first letter capitalized; empty string if not expressed yet"}`,
-        messages: [{ role: 'user', content: transcript }],
-        max_tokens: 300,
-        temperature: 0.7,
-      });
-      if (result.desire && result.desire.trim()) {
-        await sb.from('icc_profiles')
-          .update({ position: result.desire.trim().slice(0, 60) })
-          .eq('chat_id', chat_id).eq('user_id', user_id);
-      }
-      if (result.reply) await postAiMessage(sb, chat_id, result.reply, false, user_id);
-      return json({ replied: !!result.reply, desire_saved: !!result.desire });
-    }
+Respond with ONLY JSON:
+{"reply": "<your short private reply>",
+ "contribution": "<one concrete piece the user just added to the shared thing, 2-12 words in their language, first letter capitalized; empty string if their message added nothing concrete>",
+ "objective": "<propose/refine the ONE shared objective in <=12 words, only if it's not set yet or their message clearly sharpens it; otherwise empty string>"}`;
 
-    const reply = await anthropic({
+    const result = await anthropicJSON<ReplyResult>({
       model: MODEL_SMART,
-      system: baseSystem,
+      system,
       messages: [{ role: 'user', content: transcript }],
-      max_tokens: 260,
+      max_tokens: 320,
       temperature: 0.7,
     });
-    if (reply) await postAiMessage(sb, chat_id, reply, false, user_id ?? null);
-    return json({ replied: !!reply });
+
+    // Mutate the shared board: add the contribution, and set the objective if still empty.
+    if (result.contribution && result.contribution.trim() && user_id) {
+      await sb.from('icc_ideas').insert({
+        user_id, nickname: 'anon',
+        idea_summary: result.contribution.trim().slice(0, 90), status: 'proposed',
+      });
+    }
+    if (result.objective && result.objective.trim() && !chat.current_goal) {
+      await sb.from('icc_chats').update({ current_goal: result.objective.trim().slice(0, 120) })
+        .eq('id', chat_id);
+    }
+    if (result.reply) await postAiMessage(sb, chat_id, result.reply, false, user_id ?? null);
+    return json({ replied: !!result.reply, contribution: !!result.contribution, objective: !!result.objective });
   } catch (e) {
     return json({ error: String(e) }, 500);
   }

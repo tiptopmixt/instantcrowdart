@@ -1,6 +1,6 @@
 // InstantCrowdChat service worker — app-shell cache, network-first for the shell.
 // Realtime/Supabase calls always go to network (never cached).
-const CACHE = 'icc-shell-v20';
+const CACHE = 'icc-shell-v23';
 const SHELL = [
   './',
   './index.html',
@@ -26,6 +26,7 @@ const SHELL = [
   './js/components.js',
   './js/pages/home.js',
   './js/pages/chat.js',
+  './js/pages/experiment.js',
   './js/pages/wall.js',
   './icons/icon-192.svg',
   './icons/icon-512.svg',

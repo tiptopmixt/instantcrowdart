@@ -4,6 +4,28 @@ import { userId, nickname } from './auth.js';
 
 let msgChannel = null;
 let presenceChannel = null;
+let pixelChannel = null;
+
+// Subscribe to live pixel changes on the shared canvas. handlers = {onInsert,onUpdate,onDelete}.
+export function subscribePixels(chatId, handlers) {
+  unsubscribePixels();
+  pixelChannel = sb
+    .channel('icc-pixels-' + chatId)
+    .on('postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'icc_pixels', filter: `chat_id=eq.${chatId}` },
+      (p) => handlers.onInsert?.(p.new))
+    .on('postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'icc_pixels', filter: `chat_id=eq.${chatId}` },
+      (p) => handlers.onUpdate?.(p.new, p.old))
+    .on('postgres_changes',
+      { event: 'DELETE', schema: 'public', table: 'icc_pixels', filter: `chat_id=eq.${chatId}` },
+      (p) => handlers.onDelete?.(p.old))
+    .subscribe();
+  return pixelChannel;
+}
+export function unsubscribePixels() {
+  if (pixelChannel) { sb.removeChannel(pixelChannel); pixelChannel = null; }
+}
 
 // Subscribe to new messages for a chat. onInsert(row) fires per new row.
 export function subscribeMessages(chatId, onInsert) {
