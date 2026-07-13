@@ -6,7 +6,7 @@ import { L } from '../locale.js';
 import { requireConsent } from '../legal.js';
 import { getChatByCode, getMyProfile, joinChat, getPixels, placePixel, movePixel, removePixel } from '../data.js';
 import { subscribePixels, unsubscribePixels, subscribePresence, unsubscribePresence } from '../realtime.js';
-import { adsBanner, openFeedbackFlow, openAdminPanel } from '../components.js';
+import { adsBanner, openFeedbackFlow, openAdminPanel, modal } from '../components.js';
 import { userId } from '../auth.js';
 import { isAdmin } from '../config.js';
 import { navigate } from '../router.js';
@@ -69,6 +69,7 @@ export async function renderExperiment(root, code) {
   const shareBtn = h('button', { class: 'icc-share-cta' }, ['📤 ', L('share')]);
   shareBtn.addEventListener('click', shareCanvas);
   const tools = [];
+  const info = h('button', { class: 'icc-tool' }, 'ℹ️'); info.addEventListener('click', showRules); tools.push(info);
   if (isAdmin(userId())) {
     const a = h('button', { class: 'icc-tool' }, '⚙︎'); a.addEventListener('click', () => openAdminPanel(chat)); tools.push(a);
   }
@@ -279,6 +280,18 @@ async function shareCanvas() {
     window.open(URL.createObjectURL(blob), '_blank');
     try { await navigator.clipboard.writeText(`${text}\n${url}`); toast(L('copied'), 'ok'); } catch { /* ignore */ }
   } catch { /* cancelled */ }
+}
+
+// Info: current game rules + a shortcut to propose changing them.
+function showRules() {
+  const list = h('ul', { class: 'icc-legal-list' }, L('rules').map((r) => h('li', {}, r)));
+  const cta = h('button', { class: 'icc-btn' }, L('proposeChange'));
+  const m = modal('ℹ️ ' + L('rulesTitle'), h('div', { class: 'icc-legal' }, [
+    list,
+    h('p', { class: 'icc-muted small', style: 'margin-top:12px' }, L('rulesCta')),
+    h('div', { style: 'padding:8px 0 4px' }, cta),
+  ]));
+  cta.addEventListener('click', () => { m.close(); openFeedbackFlow(); });
 }
 
 function cleanup() {
