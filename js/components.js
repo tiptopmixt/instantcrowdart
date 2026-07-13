@@ -7,7 +7,7 @@ import { callFn } from './supabase.js';
 import { userId, nickname } from './auth.js';
 import { navigate } from './router.js';
 import { openTerms } from './legal.js';
-import { LANGS, L, setUiLang, hasLang } from './locale.js';
+import { LANGS, L, setUiLang, hasLang, uiLang } from './locale.js';
 
 // --- Google AdSense 320x50 banner (placeholder id, no popups/interstitials) ---
 export function adsBanner() {
@@ -130,7 +130,7 @@ export function openFeedbackFlow() {
     if (userText) { addBubble('me', userText); history.push({ role: 'user', content: userText }); }
     input.disabled = sendBtn.disabled = true;
     const { data, error } = await callFn('icc-feedback', {
-      user_id: userId(), nickname: nickname(), history,
+      user_id: userId(), nickname: nickname(), history, ui_language: uiLang(),
     });
     input.disabled = sendBtn.disabled = false;
     if (error || !data) { addBubble('ai', L('assistantBusy')); return; }
