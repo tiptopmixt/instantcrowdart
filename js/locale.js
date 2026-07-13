@@ -30,7 +30,7 @@ export function setUiLang(code) {
 
 const DICT = {
   en: {
-    tagline: "Instant crowd chat. 24 hours. Then it's gone.",
+    tagline: "Instant crowd art. 24 hours. Then it's gone.",
     rule: "24 hours of a crazy run. The goal isn't to finish first — it's to finish charged up. ⚡ No money, no pressure: just a playful crowd living the moment together.",
     join: 'Jump into the crowd ⚡',
     share: 'Share', shareStory: 'Share to stories',
@@ -68,6 +68,7 @@ const DICT = {
     pixHint: 'Tap the canvas to add a pixel · tap your own to remove it', cellTaken: 'Cell already taken',
     pixPlaced: 'pixels placed', pixColor: 'Pick a color',
     moveWait: 'You can move someone else\'s pixel again in {s}s', pixTheme: 'Let\'s draw something beautiful together ⚡',
+    proposeChange: '💡 Change the game', ideasRank: '🏆 Ideas ranking', ideasTitle: 'Ideas to change the game',
     proto: '⚠️ Web app built entirely with AI — even if it works, it\'s just an experiment, so feel free to test it.',
     feedback: '💬 Feedback',
     feedbackIntro: "This is an experiment — we don't know yet if this kind of chat makes sense. Leave your opinion and proposals; we'll analyze them later.",
@@ -123,6 +124,7 @@ const DICT = {
     pixHint: 'Tocca la tela per aggiungere un pixel · tocca i tuoi per rimuoverli', cellTaken: 'Cella già occupata',
     pixPlaced: 'pixel piazzati', pixColor: 'Scegli un colore',
     moveWait: 'Puoi spostare di nuovo un pixel altrui tra {s}s', pixTheme: 'Disegniamo insieme qualcosa di bello ⚡',
+    proposeChange: '💡 Cambia il gioco', ideasRank: '🏆 Classifica idee', ideasTitle: 'Idee per cambiare il gioco',
     proto: '⚠️ Web app creata interamente con l\'AI — anche se funziona, è solo un esperimento, perciò potete testarla tranquillamente.',
     feedback: '💬 Feedback',
     feedbackIntro: 'È un esperimento — non sappiamo ancora se questo tipo di chat abbia senso. Lascia il tuo parere e le tue proposte; le analizzeremo dopo.',
@@ -178,6 +180,7 @@ const DICT = {
     pixHint: 'Atinge pânza pentru a adăuga un pixel · atinge-i pe ai tăi pentru a-i șterge', cellTaken: 'Celulă ocupată',
     pixPlaced: 'pixeli plasați', pixColor: 'Alege o culoare',
     moveWait: 'Poți muta din nou un pixel al altcuiva peste {s}s', pixTheme: 'Să desenăm împreună ceva frumos ⚡',
+    proposeChange: '💡 Schimbă jocul', ideasRank: '🏆 Clasament idei', ideasTitle: 'Idei pentru a schimba jocul',
     proto: '⚠️ Aplicație web creată în întregime cu AI — chiar dacă funcționează, este doar un experiment, așa că puteți testa liniștiți.',
     feedback: '💬 Feedback',
     feedbackIntro: 'E un experiment — încă nu știm dacă acest tip de chat are sens. Lasă-ți părerea și propunerile; le vom analiza mai târziu.',

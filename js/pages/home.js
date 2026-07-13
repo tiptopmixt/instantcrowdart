@@ -36,7 +36,7 @@ export async function renderHome(root) {
   if (chat) {
     const content = h('div', { class: 'icc-hero2-content' }, [
       h('div', { class: 'icc-eyebrow' }, L('eyebrow')),
-      h('h1', { class: 'icc-mega' }, 'INSTANT CROWD CHAT'),
+      h('h1', { class: 'icc-mega' }, 'INSTANT CROWD ART'),
       countdownBlock(chat),
       ctaBlock(chat),
       h('p', { class: 'icc-gone' }, L('goneLine')),

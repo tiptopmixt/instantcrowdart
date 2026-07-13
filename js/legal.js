@@ -21,7 +21,7 @@ const LOCALES = {
     title: 'Before you join',
     lead: 'This is a shared pixel whiteboard. Please read before joining:',
     points: [
-      'InstantCrowdChat is a shared, anonymous whiteboard. You get 10 pixels to place anywhere, in any color.',
+      'InstantCrowdArt is a shared, anonymous whiteboard. You get 10 pixels to place anywhere, in any color.',
       'You can move or change anyone\'s pixels, or build your own little picture — together the crowd draws one image that grows as more people join.',
       'It is anonymous (no names) and free — no money is ever involved.',
       'Everything is public and can be shared. The board may be reset or deleted at any time.',
@@ -37,7 +37,7 @@ const LOCALES = {
     title: 'Prima di entrare',
     lead: 'Questa è una lavagna di pixel condivisa. Leggi prima di entrare:',
     points: [
-      'InstantCrowdChat è una lavagna condivisa e anonima. Hai 10 pixel da mettere dove vuoi, del colore che scegli.',
+      'InstantCrowdArt è una lavagna condivisa e anonima. Hai 10 pixel da mettere dove vuoi, del colore che scegli.',
       'Puoi spostare o cambiare i pixel di chiunque, oppure creare la tua piccola immagine — insieme la folla disegna un\'unica immagine che cresce man mano che entrano più persone.',
       'È anonima (nessun nome) e gratuita — non è mai coinvolto denaro.',
       'Tutto è pubblico e può essere condiviso. La lavagna può essere azzerata o cancellata in qualsiasi momento.',
@@ -53,7 +53,7 @@ const LOCALES = {
     title: 'Înainte de a intra',
     lead: 'Aceasta este o tablă de pixeli comună. Citește înainte de a intra:',
     points: [
-      'InstantCrowdChat este o tablă comună și anonimă. Ai 10 pixeli de plasat oriunde, în orice culoare.',
+      'InstantCrowdArt este o tablă comună și anonimă. Ai 10 pixeli de plasat oriunde, în orice culoare.',
       'Poți muta sau schimba pixelii oricui, ori să-ți creezi propria mică imagine — împreună mulțimea desenează o singură imagine care crește pe măsură ce intră mai mulți oameni.',
       'Este anonimă (fără nume) și gratuită — nu sunt implicați niciodată bani.',
       'Totul este public și poate fi distribuit. Tabla poate fi resetată sau ștearsă oricând.',

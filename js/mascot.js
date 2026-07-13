@@ -5,7 +5,7 @@
 // Full mascot (logo + hero). size = pixel side.
 export function mascotSVG(size = 96) {
   return `
-  <svg class="icc-mascot" width="${size}" height="${size}" viewBox="0 0 120 120" role="img" aria-label="InstantCrowdChat lightning mascot" xmlns="http://www.w3.org/2000/svg">
+  <svg class="icc-mascot" width="${size}" height="${size}" viewBox="0 0 120 120" role="img" aria-label="InstantCrowdArt lightning mascot" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <linearGradient id="boltGrad" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" stop-color="#FFE24D"/>

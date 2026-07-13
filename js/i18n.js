@@ -4,7 +4,7 @@ import { uiLang } from './locale.js';
 
 const STRINGS = {
   en: {
-    tagline: "Instant crowd chat. 24 hours. Then it's gone.",
+    tagline: "Instant crowd art. 24 hours. Then it's gone.",
     join: 'Jump into the crowd ⚡',
     onlineNow: 'online now',
     participants: 'participants',

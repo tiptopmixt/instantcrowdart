@@ -1,7 +1,7 @@
 {
-  "name": "InstantCrowdChat",
-  "short_name": "ICC",
-  "description": "Instant crowd chat. 24 hours. Then it's gone.",
+  "name": "InstantCrowdArt",
+  "short_name": "ICArt",
+  "description": "Instant crowd art. 24 hours. Then it's gone.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

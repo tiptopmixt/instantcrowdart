@@ -1,4 +1,4 @@
-// InstantCrowdChat — global configuration
+// InstantCrowdArt — global configuration
 // NOTE: Only the Supabase URL + anon (public) key belong in the frontend.
 // The anon key is safe to expose (RLS protects data). The Anthropic key lives
 // ONLY in Supabase Edge Function secrets and is never referenced here.

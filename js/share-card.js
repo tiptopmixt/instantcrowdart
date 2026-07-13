@@ -58,7 +58,7 @@ export async function buildCardBlob({ who, role, title, count, code }) {
   ctx.fillText('⚡', W / 2, 260);
   ctx.fillStyle = '#FFD600';
   ctx.font = 'bold 52px sans-serif';
-  ctx.fillText('InstantCrowdChat', W / 2, 340);
+  ctx.fillText('InstantCrowdArt', W / 2, 340);
 
   // Identity block: name + chosen area (localized, no avatars)
   if (who) {

@@ -110,6 +110,13 @@ export async function renderExperiment(root, code) {
     h('span', { class: 'icc-muted', id: 'px-stats' }, ''),
   ]));
 
+  // Ideas to change the game: propose (AI chat) + see the ranking (other page)
+  const propose = h('button', { class: 'icc-btn icc-btn-sm ghost' }, L('proposeChange'));
+  propose.addEventListener('click', () => openFeedbackFlow());
+  const rank = h('button', { class: 'icc-btn icc-btn-sm ghost' }, L('ideasRank'));
+  rank.addEventListener('click', () => navigate('/wall'));
+  page.appendChild(h('div', { class: 'icc-px-actions' }, [propose, rank]));
+
   page.appendChild(adsBanner());
   root.appendChild(page);
 
@@ -259,7 +266,7 @@ async function shareCanvas() {
   x.fillStyle = '#f4f4f2'; x.fillRect(pad, pad, board, board);
   for (const [k, p] of pixels) { const [px, py] = k.split(',').map(Number); x.fillStyle = p.color; x.fillRect(pad + px * c, pad + py * c, c, c); }
   x.textAlign = 'center'; x.fillStyle = '#FFD600'; x.font = 'bold 46px sans-serif';
-  x.fillText('⚡ Pixel Art · InstantCrowdChat', S / 2, S + 40);
+  x.fillText('⚡ Pixel Art · InstantCrowdArt', S / 2, S + 40);
   x.fillStyle = '#fff'; x.font = 'bold 40px sans-serif';
   x.fillText(L('shareCta') + ' ' + (chatRef.short_code || 'FOUND1'), S / 2, S + 95);
 

@@ -410,6 +410,12 @@ body { background: radial-gradient(1200px 800px at 50% -200px, #17130a 0%, #0707
 .icc-px-color.sel { border-color: var(--yellow); transform: scale(1.18); box-shadow: 0 0 0 2px rgba(255,214,0,.35); }
 .icc-px-bar { display: flex; align-items: center; justify-content: space-between; padding: 6px 16px; font-size: 13px; }
 .icc-px-bar b { color: var(--yellow); font-size: 15px; }
+.icc-px-actions { display: flex; gap: 8px; justify-content: center; padding: 10px 16px 4px; flex-wrap: wrap; }
+.icc-idea-row { display: flex; align-items: center; gap: 12px; }
+.icc-idea-rank { font-size: 20px; font-weight: 900; color: var(--yellow); min-width: 34px; }
+.icc-idea-body { flex: 1; }
+.icc-idea-body p { margin: 2px 0; }
+.icc-idea-vote { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 
 /* --- Toast --- */
 #icc-toast { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%) translateY(20px); background: var(--bg-3); border: 1px solid var(--line); color: var(--text); padding: 11px 18px; border-radius: 999px; font-size: 14px; opacity: 0; pointer-events: none; transition: all .25s ease; z-index: 60; max-width: 90vw; text-align: center; }
