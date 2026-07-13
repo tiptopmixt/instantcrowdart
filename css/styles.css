@@ -369,13 +369,11 @@ body { background: radial-gradient(1200px 800px at 50% -200px, #17130a 0%, #0707
 @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-33.33%); } }
 
 /* --- Peek: frosted glass over the live crowd --- */
-.icc-peek { position: relative; margin: 26px auto; width: min(560px, 92vw); height: 250px; border-radius: 26px; border: 1px solid rgba(255,255,255,.08); overflow: hidden; background: var(--bg-2); }
-.icc-peek-stream { position: absolute; inset: 0; padding: 18px 22px; display: flex; flex-direction: column; justify-content: flex-end; filter: blur(6px); opacity: .8; }
-.icc-ghost { height: 34px; border-radius: 18px; margin: 7px 0; background: linear-gradient(90deg, rgba(255,255,255,.07), rgba(255,214,0,.18), rgba(255,255,255,.07)); background-size: 220% 100%; animation: shimmer 1.8s linear infinite, ghostIn .5s ease both; align-self: flex-start; }
-.icc-ghost.right { align-self: flex-end; background: linear-gradient(90deg, rgba(255,214,0,.22), rgba(255,255,255,.09)); background-size: 220% 100%; }
+.icc-peek { position: relative; margin: 22px auto; width: min(340px, 86vw); height: min(340px, 86vw); border-radius: 20px; border: 1px solid rgba(255,214,0,.25); overflow: hidden; background: var(--bg-2); box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+.icc-peek-canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; background: #f4f4f2; }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -20% 0; } }
 @keyframes ghostIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
-.icc-peek-lock { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: linear-gradient(180deg, rgba(7,7,11,.1) 0%, rgba(7,7,11,.88) 90%); }
+.icc-peek-lock { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 8px; padding-bottom: 16px; background: linear-gradient(180deg, rgba(7,7,11,0) 45%, rgba(7,7,11,.82) 100%); }
 .icc-peek-live { font-size: 11px; font-weight: 900; letter-spacing: 2px; color: var(--red); animation: livepulse 1.6s ease-in-out infinite; }
 .icc-peek-lock strong { font-size: 16px; }
 

@@ -2,7 +2,7 @@
 // a frosted "peek" at the crowd talking, and one giant way in. FOMO by design.
 import { h, el, joinUrl } from '../utils.js';
 import { t } from '../i18n.js';
-import { getActiveChat, getHallOfFame } from '../data.js';
+import { getActiveChat, getHallOfFame, getPixels } from '../data.js';
 import { subscribePresence, unsubscribePresence } from '../realtime.js';
 import {
   adsBanner, feedbackButton, adminButton, termsLink, languageGate,
@@ -52,15 +52,15 @@ export async function renderHome(root) {
   }
   root.appendChild(hero);
 
-  // ---------- PEEK (the crowd behind frosted glass) ----------
+  // ---------- PEEK: live preview of the shared canvas ----------
   if (chat) {
-    const stream = h('div', { class: 'icc-peek-stream', id: 'peek-stream' });
+    const preview = h('canvas', { class: 'icc-peek-canvas', id: 'peek-canvas' });
     const lock = h('div', { class: 'icc-peek-lock' }, [
       h('div', { class: 'icc-peek-live' }, '● LIVE'),
       h('strong', {}, L('peekLock')),
       peekButton(chat),
     ]);
-    root.appendChild(h('section', { class: 'icc-peek' }, [stream, lock]));
+    root.appendChild(h('section', { class: 'icc-peek' }, [preview, lock]));
   }
 
   // ---------- HALL OF FAME (minimal) ----------
@@ -102,25 +102,24 @@ export async function renderHome(root) {
     });
     updateTicker(chat, 0, []);
 
-    // ghost bubbles rate follows real activity
-    let rate = 4000;
-    callFn('icc-summarize', { chat_id: chat.id, stats_only: true }).then(({ data }) => {
-      const mph = data?.msg_per_hour || 0;
-      rate = mph > 30 ? 1200 : mph > 10 ? 2200 : mph > 2 ? 3200 : 4500;
-    });
-    const spawnGhost = () => {
-      const s = el('#peek-stream');
-      if (!s) return;
-      const g = h('div', {
-        class: 'icc-ghost' + (Math.random() > 0.5 ? ' right' : ''),
-        style: `width:${35 + Math.random() * 45}%`,
-      });
-      s.appendChild(g);
-      setTimeout(() => g.remove(), 7000);
-      if (s.children.length > 10) s.firstChild?.remove();
+    // live mini-preview of the actual pixel canvas
+    const drawPreview = async () => {
+      const cv = el('#peek-canvas');
+      if (!cv) return;
+      const px = await getPixels(chat.id);
+      let grid = 16;
+      while (grid < 64 && px.length / (grid * grid) > 0.5) grid += 2;
+      let maxc = 0; for (const p of px) maxc = Math.max(maxc, p.x, p.y);
+      while (grid <= maxc && grid < 64) grid += 2;
+      const disp = cv.clientWidth || 300, ratio = Math.min(window.devicePixelRatio || 1, 2);
+      cv.width = disp * ratio; cv.height = disp * ratio;
+      const cx = cv.getContext('2d'); cx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      const cellPx = disp / grid;
+      cx.fillStyle = '#f4f4f2'; cx.fillRect(0, 0, disp, disp);
+      for (const p of px) { cx.fillStyle = p.color; cx.fillRect(p.x * cellPx, p.y * cellPx, cellPx, cellPx); }
     };
-    ghostTimer = setInterval(() => spawnGhost(), 900);
-    setTimeout(() => { clearInterval(ghostTimer); ghostTimer = setInterval(spawnGhost, rate / 2); }, 3000);
+    drawPreview();
+    ghostTimer = setInterval(drawPreview, 4000);
   }
 }
 
