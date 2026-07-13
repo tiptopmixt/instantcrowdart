@@ -403,7 +403,8 @@ body { background: radial-gradient(1200px 800px at 50% -200px, #17130a 0%, #0707
 
 /* --- Pixel Art experiment --- */
 .icc-pixelpage { padding: 0 0 24px; }
-.icc-px-hint { font-size: 12.5px; color: var(--muted); text-align: center; padding: 10px 14px; }
+.icc-px-theme { font-size: 15px; font-weight: 800; color: var(--yellow); text-align: center; padding: 10px 14px 2px; }
+.icc-px-hint { font-size: 12px; color: var(--muted); text-align: center; padding: 2px 14px 8px; }
 .icc-px-wrap { display: flex; justify-content: center; padding: 4px 12px; }
 .icc-px-canvas { touch-action: none; border-radius: 12px; box-shadow: 0 8px 40px rgba(0,0,0,.5), 0 0 0 1px rgba(255,214,0,.25); background: #f4f4f2; cursor: crosshair; image-rendering: pixelated; }
 .icc-px-palette { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; padding: 14px 12px 6px; }

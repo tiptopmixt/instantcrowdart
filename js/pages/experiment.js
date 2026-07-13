@@ -12,10 +12,29 @@ import { isAdmin } from '../config.js';
 import { navigate } from '../router.js';
 import { uiLang } from '../locale.js';
 
-const GRID = 24;         // 24 x 24 canvas
+// The board "breathes": it starts small and lively, and grows a ring whenever it
+// gets too full — so density stays comfortable with any number of players.
+const BASE = 16;         // starting grid (16x16)
+const MAX = 64;          // cap so cells stay tappable
+const FILL_GROW = 0.5;   // grow when more than 50% of cells are colored
+let gridN = BASE;
 const BUDGET = 10;       // pixels per user
+const FOREIGN_COOLDOWN = 8000;  // ms between moving other people's pixels
+let lastForeignMove = 0;
 const PALETTE = ['#111111', '#ffffff', '#e53935', '#fb8c00', '#fdd835', '#43a047',
   '#1e88e5', '#8e24aa', '#00acc1', '#ff4081', '#795548', '#9e9e9e'];
+
+function targetGrid() {
+  let g = BASE;
+  while (g < MAX && pixels.size / (g * g) > FILL_GROW) g += 2;
+  return g;
+}
+// Recompute grid size, resize if it changed, then redraw + update the bar.
+function refresh(online) {
+  const g = targetGrid();
+  if (g !== gridN) { gridN = g; sizeCanvas(); } else { draw(); }
+  updateBar(online);
+}
 
 let timer = null;
 let ctx = null, canvasEl = null, cell = 0, dpr = 1;
@@ -65,8 +84,9 @@ export async function renderExperiment(root, code) {
     h('div', { class: 'icc-fuse-fill', id: 'px-fuse' }, [h('span', { class: 'icc-fuse-spark' })]),
   ]));
 
-  // Instructions
-  page.appendChild(h('div', { class: 'icc-px-hint' }, '⚡ ' + L('pixHint')));
+  // Positive prompt + instructions
+  page.appendChild(h('div', { class: 'icc-px-theme' }, L('pixTheme')));
+  page.appendChild(h('div', { class: 'icc-px-hint' }, L('pixHint')));
 
   // Canvas
   canvasEl = h('canvas', { class: 'icc-px-canvas' });
@@ -97,23 +117,22 @@ export async function renderExperiment(root, code) {
   (await getPixels(chat.id)).forEach((p) => pixels.set(key(p.x, p.y), { id: p.id, color: p.color, uid: p.user_id }));
 
   sizeCanvas();
-  draw();
-  updateBar();
+  refresh();
   window.addEventListener('resize', sizeCanvas);
   canvasEl.addEventListener('pointerdown', onTap);
 
   // Realtime pixels
   subscribePixels(chat.id, {
-    onInsert: (p) => { pixels.set(key(p.x, p.y), { id: p.id, color: p.color, uid: p.user_id }); draw(); updateBar(); },
+    onInsert: (p) => { pixels.set(key(p.x, p.y), { id: p.id, color: p.color, uid: p.user_id }); refresh(); },
     onUpdate: (n, o) => {
       if (o) pixels.delete(key(o.x, o.y));
       pixels.set(key(n.x, n.y), { id: n.id, color: n.color, uid: n.user_id });
-      if (selected && selected.id === n.id) selected = { id: n.id, x: n.x, y: n.y };
-      draw(); updateBar();
+      if (selected && selected.id === n.id) selected = { id: n.id, x: n.x, y: n.y, uid: n.user_id };
+      refresh();
     },
-    onDelete: (o) => { if (o) pixels.delete(key(o.x, o.y)); draw(); updateBar(); },
+    onDelete: (o) => { if (o) pixels.delete(key(o.x, o.y)); refresh(); },
   });
-  subscribePresence(chat.id, (count) => { updateBar(count); });
+  subscribePresence(chat.id, (count) => { refresh(count); });
 
   // Countdown + fuse
   timer = setInterval(() => {
@@ -137,7 +156,7 @@ function sizeCanvas() {
   canvasEl.style.height = disp + 'px';
   canvasEl.width = disp * dpr;
   canvasEl.height = disp * dpr;
-  cell = disp / GRID;
+  cell = disp / gridN;
   ctx = canvasEl.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   draw();
@@ -145,7 +164,7 @@ function sizeCanvas() {
 
 function draw() {
   if (!ctx) return;
-  const size = GRID * cell;
+  const size = gridN * cell;
   ctx.clearRect(0, 0, size, size);
   // white board
   ctx.fillStyle = '#f4f4f2';
@@ -162,7 +181,7 @@ function draw() {
   }
   // grid lines
   ctx.strokeStyle = 'rgba(0,0,0,.06)'; ctx.lineWidth = 1;
-  for (let i = 1; i < GRID; i++) {
+  for (let i = 1; i < gridN; i++) {
     ctx.beginPath(); ctx.moveTo(i * cell, 0); ctx.lineTo(i * cell, size); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(size, i * cell); ctx.stroke();
   }
@@ -177,36 +196,42 @@ async function onTap(e) {
   const rect = canvasEl.getBoundingClientRect();
   const x = Math.floor((e.clientX - rect.left) / cell);
   const y = Math.floor((e.clientY - rect.top) / cell);
-  if (x < 0 || y < 0 || x >= GRID || y >= GRID) return;
+  if (x < 0 || y < 0 || x >= gridN || y >= gridN) return;
   const here = pixels.get(key(x, y));
 
   if (selected) {
     if (here && here.id === selected.id) {
       // tapped the picked-up pixel again: remove it if it's mine, else just drop
-      if (here.uid === userId()) { pixels.delete(key(x, y)); draw(); updateBar(); await removePixel(here.id); }
+      if (here.uid === userId()) { pixels.delete(key(x, y)); refresh(); await removePixel(here.id); }
       selected = null; draw();
       return;
     }
-    if (here) { selected = { id: here.id, x, y }; draw(); return; } // switch selection
+    if (here) { selected = { id: here.id, x, y, uid: here.uid }; draw(); return; } // switch selection
+    // Moving someone else's pixel is allowed but rate-limited (build, don't grief).
+    if (selected.uid !== userId()) {
+      const wait = FOREIGN_COOLDOWN - (Date.now() - lastForeignMove);
+      if (wait > 0) { toast(L('moveWait').replace('{s}', Math.ceil(wait / 1000)), 'info'); return; }
+      lastForeignMove = Date.now();
+    }
     // move selected pixel to empty cell (optimistic)
     const from = selected;
     const p = pixels.get(key(from.x, from.y));
     if (p) { pixels.delete(key(from.x, from.y)); pixels.set(key(x, y), p); }
-    selected = null; draw(); updateBar();
+    selected = null; refresh();
     const { error } = await movePixel(from.id, x, y);
     if (error) { toast(L('cellTaken'), 'error'); }
     return;
   }
 
-  if (here) { selected = { id: here.id, x, y }; draw(); return; } // pick up any pixel
+  if (here) { selected = { id: here.id, x, y, uid: here.uid }; draw(); return; } // pick up any pixel
 
   // place a new pixel of my color
   if (budgetLeft() <= 0) { toast(L('pixFull'), 'info'); return; }
   const tempId = 'tmp-' + x + '-' + y;
   pixels.set(key(x, y), { id: tempId, color, uid: userId() });
-  draw(); updateBar();
+  refresh();
   const { pixel, error } = await placePixel(chatRef.id, x, y, color);
-  if (error) { pixels.delete(key(x, y)); draw(); updateBar(); toast(L('cellTaken'), 'error'); }
+  if (error) { pixels.delete(key(x, y)); refresh(); toast(L('cellTaken'), 'error'); }
   else if (pixel) pixels.set(key(x, y), { id: pixel.id, color: pixel.color, uid: pixel.user_id });
 }
 
@@ -217,13 +242,17 @@ function updateBar(online) {
     b.innerHTML = `🎨 <b>${left}/${BUDGET}</b> ${L('pixLeft')}`;
   }
   const s = el('#px-stats');
-  if (s) s.textContent = `${pixels.size} ${L('pixPlaced')}` + (online != null ? ` · ⚡ ${online}` : '');
+  if (s) {
+    const on = online != null ? online : (Number((s.dataset.on) || 0));
+    if (online != null) s.dataset.on = String(online);
+    s.textContent = `${gridN}×${gridN} · ${pixels.size} ${L('pixPlaced')}` + (on ? ` · ⚡ ${on}` : '');
+  }
 }
 
 // Share the current canvas as an image (call for help).
 async function shareCanvas() {
   toast(L('shareStory') + '…', 'info');
-  const S = 1080, pad = 60, board = S - pad * 2, c = board / GRID;
+  const S = 1080, pad = 60, board = S - pad * 2, c = board / gridN;
   const cv = document.createElement('canvas'); cv.width = S; cv.height = S + 120;
   const x = cv.getContext('2d');
   x.fillStyle = '#0d0d11'; x.fillRect(0, 0, cv.width, cv.height);
