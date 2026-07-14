@@ -173,23 +173,40 @@ export async function upvoteIdea(ideaId) {
   return { error };
 }
 
-// --- Pixel Art ---
+// --- Pixel Art (tile mosaic) ---
 export async function getPixels(chatId) {
   const { data } = await sb.from('icc_pixels')
-    .select('id, user_id, x, y, color').eq('chat_id', chatId);
+    .select('id, user_id, x, y, color, created_at').eq('chat_id', chatId);
   return data || [];
 }
-export async function placePixel(chatId, x, y, color) {
+export async function placePixel(chatId, x, y, color) {   // in YOUR tile
   const { data, error } = await sb.from('icc_pixels')
     .insert({ chat_id: chatId, user_id: userId(), x, y, color }).select().maybeSingle();
   return { pixel: data, error };
 }
-export async function movePixel(id, x, y) {          // anyone can move any pixel
-  const { error } = await sb.from('icc_pixels').update({ x, y }).eq('id', id);
+export async function recolorPixel(id, color) {           // your own cell
+  const { error } = await sb.from('icc_pixels').update({ color }).eq('id', id).eq('user_id', userId());
   return { error };
 }
-export async function removePixel(id) {              // only your own
+export async function removePixel(id) {                    // your own cell
   const { error } = await sb.from('icc_pixels').delete().eq('id', id).eq('user_id', userId());
+  return { error };
+}
+
+// --- Tile likes (one heart per person per tile) ---
+export async function getLikes(chatId) {
+  const { data } = await sb.from('icc_tile_likes')
+    .select('tile_user_id, liker_id').eq('chat_id', chatId);
+  return data || [];
+}
+export async function likeTile(chatId, tileUserId) {
+  const { error } = await sb.from('icc_tile_likes')
+    .insert({ chat_id: chatId, tile_user_id: tileUserId, liker_id: userId() });
+  return { error };
+}
+export async function unlikeTile(chatId, tileUserId) {
+  const { error } = await sb.from('icc_tile_likes')
+    .delete().eq('chat_id', chatId).eq('tile_user_id', tileUserId).eq('liker_id', userId());
   return { error };
 }
 

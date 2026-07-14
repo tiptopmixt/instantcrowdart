@@ -10,7 +10,7 @@ Deno.serve(async (req) => {
     const { chat_id } = await req.json();
     if (!chat_id) return json({ error: 'missing chat_id' }, 400);
     const sb = adminClient();
-    const expires_at = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+    const expires_at = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
     await sb.from('icc_chats').update({ expires_at }).eq('id', chat_id);
     return json({ ok: true, expires_at });
   } catch (e) {

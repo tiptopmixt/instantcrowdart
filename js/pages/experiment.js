@@ -1,53 +1,41 @@
-// Pixel Art — the shared canvas experiment. Everyone gets 10 pixels to place
-// anywhere (any color), can move ANY pixel (yours or others'), sees the picture
-// grow live, and shares the creation. No names, no AI at the center.
+// Tile mosaic — everyone paints their OWN 8x8 tile (unlimited pixels, any color).
+// Tiles auto-join into one growing picture. You can ❤️ other people's tiles.
 import { h, el, toast, formatRemaining, joinUrl } from '../utils.js';
-import { L } from '../locale.js';
+import { L, uiLang } from '../locale.js';
 import { requireConsent } from '../legal.js';
-import { getChatByCode, getMyProfile, joinChat, getPixels, placePixel, movePixel, removePixel } from '../data.js';
+import {
+  getChatByCode, getMyProfile, joinChat,
+  getPixels, placePixel, recolorPixel, removePixel,
+  getLikes, likeTile, unlikeTile,
+} from '../data.js';
 import { subscribePixels, unsubscribePixels, subscribePresence, unsubscribePresence } from '../realtime.js';
 import { adsBanner, openFeedbackFlow, openAdminPanel, modal } from '../components.js';
 import { callFn } from '../supabase.js';
 import { userId } from '../auth.js';
 import { isAdmin } from '../config.js';
 import { navigate } from '../router.js';
-import { uiLang } from '../locale.js';
 
-// The board "breathes": it starts small and lively, and grows a ring whenever it
-// gets too full — so density stays comfortable with any number of players.
-const BASE = 16;         // starting grid (16x16)
-const MAX = 64;          // cap so cells stay tappable
-const FILL_GROW = 0.5;   // grow when more than 50% of cells are colored
-let gridN = BASE;
-const BUDGET = 10;       // pixels per user
-const FOREIGN_COOLDOWN = 8000;  // ms between moving other people's pixels
-let lastForeignMove = 0;
+const TILE = 16; // 16x16, standard for everyone
 const PALETTE = ['#111111', '#ffffff', '#e53935', '#fb8c00', '#fdd835', '#43a047',
   '#1e88e5', '#8e24aa', '#00acc1', '#ff4081', '#795548', '#9e9e9e'];
 
-function targetGrid() {
-  let g = BASE;
-  while (g < MAX && pixels.size / (g * g) > FILL_GROW) g += 2;
-  return g;
-}
-// Recompute grid size, resize if it changed, then redraw + update the bar.
-function refresh(online) {
-  const g = targetGrid();
-  if (g !== gridN) { gridN = g; sizeCanvas(); } else { draw(); }
-  updateBar(online);
-}
-
-let timer = null;
-let pollTimer = null;
-let ctx = null, canvasEl = null, cell = 0, dpr = 1;
-const pixels = new Map();       // "x,y" -> { id, color, uid }
-let selected = null;            // { id, x, y } picked up to move
-let color = PALETTE[2];
+let timer = null, pollTimer = null;
+let mCanvas = null, mCtx = null, mW = 0, mH = 0, dpr = 1;
+const TW = 112;                   // world px per tile at scale 1 (map is pannable/zoomable)
+const view = { scale: 1, ox: 0, oy: 0, ready: false };
+const ptrs = new Map();           // pointerId -> {x,y}
+let panStart = null, pinchStart = null, moved = false;
+const tiles = new Map();          // uid -> { cells: Map<"x,y",{id,color}>, first: number }
+const likeCount = new Map();      // uid -> count
+const myLikes = new Set();        // uids I liked
+let selectedUid = null;
 let chatRef = null;
 
 const key = (x, y) => `${x},${y}`;
-function myCount() { let n = 0; for (const p of pixels.values()) if (p.uid === userId()) n++; return n; }
-function budgetLeft() { return Math.max(0, BUDGET - myCount()); }
+function tileOf(uid) { if (!tiles.has(uid)) tiles.set(uid, { cells: new Map(), first: Date.now() }); return tiles.get(uid); }
+function orderedIds() { return [...tiles.keys()].sort((a, b) => tiles.get(a).first - tiles.get(b).first); }
+function mosaicCols() { return Math.max(1, Math.ceil(Math.sqrt(Math.max(1, tiles.size)))); }
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
 export async function renderExperiment(root, code) {
   cleanup();
@@ -55,7 +43,6 @@ export async function renderExperiment(root, code) {
   if (!chat) { navigate('/'); return; }
   chatRef = chat;
 
-  // Consent + join. A NEW joiner (re)starts the 24h countdown for everyone.
   if (!(await getMyProfile(chat.id))) {
     const ok = await requireConsent();
     if (!ok) { navigate('/'); return; }
@@ -71,248 +58,334 @@ export async function renderExperiment(root, code) {
   const countdown = h('span', { class: 'icc-mini-count', id: 'px-count' },
     chat.expires_at ? formatRemaining(chat.expires_at) : '∞');
   const shareBtn = h('button', { class: 'icc-share-cta' }, ['📤 ', L('share')]);
-  shareBtn.addEventListener('click', shareCanvas);
+  shareBtn.addEventListener('click', shareMosaic);
   const tools = [];
   const info = h('button', { class: 'icc-tool' }, 'ℹ️'); info.addEventListener('click', showRules); tools.push(info);
-  if (isAdmin(userId())) {
-    const a = h('button', { class: 'icc-tool' }, '⚙︎'); a.addEventListener('click', () => openAdminPanel(chat)); tools.push(a);
-  }
+  if (isAdmin(userId())) { const a = h('button', { class: 'icc-tool' }, '⚙︎'); a.addEventListener('click', () => openAdminPanel(chat)); tools.push(a); }
   const fb = h('button', { class: 'icc-tool' }, '💬'); fb.addEventListener('click', () => openFeedbackFlow()); tools.push(fb);
   page.appendChild(h('div', { class: 'icc-topbar' }, [
     h('button', { class: 'icc-link', onclick: () => navigate('/') }, '‹'),
-    h('div', { class: 'icc-topbar-title' }, '🟦 ' + (chat.title || 'Pixel Art')),
+    h('div', { class: 'icc-topbar-title' }, '🧩 ' + (chat.title || 'Pixel Art')),
     countdown, ...tools, shareBtn,
   ]));
 
-  // Fuse
   page.appendChild(h('div', { class: 'icc-fuse' + (chat.expires_at ? '' : ' infinite') }, [
     h('div', { class: 'icc-fuse-fill', id: 'px-fuse' }, [h('span', { class: 'icc-fuse-spark' })]),
   ]));
 
-  // Positive prompt + instructions
-  page.appendChild(h('div', { class: 'icc-px-theme' }, L('pixTheme')));
-  page.appendChild(h('div', { class: 'icc-px-hint' }, L('pixHint')));
+  page.appendChild(h('div', { class: 'icc-px-hint' }, L('mosaicHint')));
 
-  // Canvas
-  canvasEl = h('canvas', { class: 'icc-px-canvas' });
-  page.appendChild(h('div', { class: 'icc-px-wrap' }, [canvasEl]));
+  // Mosaic = a pannable/zoomable MAP
+  mCanvas = h('canvas', { class: 'icc-map-canvas' });
+  const zin = h('button', { class: 'icc-map-btn' }, '＋'); zin.addEventListener('click', () => zoomBy(1.3));
+  const zout = h('button', { class: 'icc-map-btn' }, '−'); zout.addEventListener('click', () => zoomBy(1 / 1.3));
+  const zfit = h('button', { class: 'icc-map-btn' }, '⤢'); zfit.addEventListener('click', () => { fitView(); drawMosaic(); });
+  page.appendChild(h('div', { class: 'icc-map-wrap' }, [mCanvas, h('div', { class: 'icc-map-ctrl' }, [zin, zout, zfit])]));
 
-  // Palette
-  const pal = h('div', { class: 'icc-px-palette' }, PALETTE.map((c) => {
-    const sw = h('button', { class: 'icc-px-color' + (c === color ? ' sel' : ''), style: `background:${c}` });
-    sw.addEventListener('click', () => {
-      color = c;
-      [...pal.children].forEach((n) => n.classList.remove('sel'));
-      sw.classList.add('sel');
-    });
-    return sw;
-  }));
-  page.appendChild(pal);
+  // Selection bar (like / edit for the tapped tile)
+  page.appendChild(h('div', { class: 'icc-px-sel', id: 'px-sel' }));
 
-  // Budget / stats bar
-  page.appendChild(h('div', { class: 'icc-px-bar' }, [
-    h('span', { id: 'px-budget' }, ''),
-    h('span', { class: 'icc-muted', id: 'px-stats' }, ''),
-  ]));
+  // Big "edit my tile" button
+  const mine = h('button', { class: 'icc-btn icc-btn-xl' }, L('myTile'));
+  mine.addEventListener('click', openEditor);
+  page.appendChild(h('div', { style: 'text-align:center;padding:6px 0 2px' }, mine));
 
-  // Ideas to change the game: propose (AI chat) + see the ranking (other page)
-  const propose = h('button', { class: 'icc-btn icc-btn-sm ghost' }, L('proposeChange'));
-  propose.addEventListener('click', () => openFeedbackFlow());
-  const rank = h('button', { class: 'icc-btn icc-btn-sm ghost' }, L('ideasRank'));
-  rank.addEventListener('click', () => navigate('/wall'));
-  page.appendChild(h('div', { class: 'icc-px-actions' }, [propose, rank]));
-
+  page.appendChild(h('div', { class: 'icc-px-bar' }, [h('span', { id: 'px-stats', class: 'icc-muted' }, '')]));
   page.appendChild(adsBanner());
   root.appendChild(page);
 
-  // Load pixels
-  (await getPixels(chat.id)).forEach((p) => pixels.set(key(p.x, p.y), { id: p.id, color: p.color, uid: p.user_id }));
-
-  sizeCanvas();
-  refresh();
-  window.addEventListener('resize', sizeCanvas);
-  canvasEl.addEventListener('pointerdown', onTap);
-
-  // Realtime pixels
-  subscribePixels(chat.id, {
-    onInsert: (p) => { pixels.set(key(p.x, p.y), { id: p.id, color: p.color, uid: p.user_id }); refresh(); },
-    onUpdate: (n, o) => {
-      if (o) pixels.delete(key(o.x, o.y));
-      pixels.set(key(n.x, n.y), { id: n.id, color: n.color, uid: n.user_id });
-      if (selected && selected.id === n.id) selected = { id: n.id, x: n.x, y: n.y, uid: n.user_id };
-      refresh();
-    },
-    onDelete: (o) => { if (o) pixels.delete(key(o.x, o.y)); refresh(); },
+  // Load data
+  (await getPixels(chat.id)).forEach((p) => {
+    const t = tileOf(p.user_id);
+    t.cells.set(key(p.x, p.y), { id: p.id, color: p.color });
+    const ts = new Date(p.created_at).getTime(); if (ts < t.first) t.first = ts;
   });
-  subscribePresence(chat.id, (count) => { refresh(count); });
+  (await getLikes(chat.id)).forEach((l) => {
+    likeCount.set(l.tile_user_id, (likeCount.get(l.tile_user_id) || 0) + 1);
+    if (l.liker_id === userId()) myLikes.add(l.tile_user_id);
+  });
 
-  // Countdown + fuse (the 24h window; restarts when a new user joins).
-  const WINDOW = 24 * 3600 * 1000;
+  sizeMosaic();
+  window.addEventListener('resize', sizeMosaic);
+  mCanvas.addEventListener('pointerdown', onPtrDown);
+  mCanvas.addEventListener('pointermove', onPtrMove);
+  mCanvas.addEventListener('pointerup', onPtrUp);
+  mCanvas.addEventListener('pointercancel', onPtrUp);
+
+  subscribePixels(chat.id, {
+    onInsert: (p) => { applyPixel(p); drawMosaic(); },
+    onUpdate: (n) => { applyPixel(n); drawMosaic(); },
+    onDelete: (o) => { if (o) tiles.get(o.user_id)?.cells.delete(key(o.x, o.y)); drawMosaic(); },
+  });
+  subscribePresence(chat.id, (count) => updateStats(count));
+
+  const WINDOW = 7 * 24 * 3600 * 1000;
   timer = setInterval(() => {
     if (!chat.expires_at) return;
-    const c = el('#px-count');
-    if (c) c.textContent = formatRemaining(chat.expires_at);
+    const c = el('#px-count'); if (c) c.textContent = formatRemaining(chat.expires_at);
     const ff = el('#px-fuse');
-    if (ff) {
-      const left = new Date(chat.expires_at).getTime() - Date.now();
-      ff.style.width = Math.max(0, Math.min(100, (left / WINDOW) * 100)) + '%';
-    }
+    if (ff) { const left = new Date(chat.expires_at).getTime() - Date.now(); ff.style.width = Math.max(0, Math.min(100, (left / WINDOW) * 100)) + '%'; }
   }, 1000);
 
-  // Pick up expires_at refreshes from other people joining (poll lightly).
+  // Poll likes + expiry (both are low-frequency)
   pollTimer = setInterval(async () => {
+    const ls = await getLikes(chat.id);
+    likeCount.clear(); myLikes.clear();
+    ls.forEach((l) => { likeCount.set(l.tile_user_id, (likeCount.get(l.tile_user_id) || 0) + 1); if (l.liker_id === userId()) myLikes.add(l.tile_user_id); });
+    updateSelBar();
     const { chat: fresh } = await getChatByCode(chat.short_code);
-    if (fresh?.expires_at && fresh.expires_at !== chat.expires_at) {
-      chat.expires_at = fresh.expires_at;
-      el('.icc-fuse')?.classList.remove('infinite');
-    }
-  }, 20000);
+    if (fresh?.expires_at && fresh.expires_at !== chat.expires_at) { chat.expires_at = fresh.expires_at; el('.icc-fuse')?.classList.remove('infinite'); }
+  }, 10000);
+
+  updateStats();
+  updateSelBar();
 }
 
-function sizeCanvas() {
-  if (!canvasEl) return;
-  const disp = Math.min(canvasEl.parentElement.clientWidth, 460);
+function applyPixel(p) {
+  const t = tileOf(p.user_id);
+  t.cells.set(key(p.x, p.y), { id: p.id, color: p.color });
+  const ts = new Date(p.created_at || Date.now()).getTime(); if (ts < t.first) t.first = ts;
+}
+
+function sizeMosaic() {
+  if (!mCanvas) return;
+  const w = mCanvas.parentElement.clientWidth;
+  const h = mCanvas.parentElement.clientHeight || Math.round(window.innerHeight * 0.5);
   dpr = Math.min(window.devicePixelRatio || 1, 2);
-  canvasEl.style.width = disp + 'px';
-  canvasEl.style.height = disp + 'px';
-  canvasEl.width = disp * dpr;
-  canvasEl.height = disp * dpr;
-  cell = disp / gridN;
-  ctx = canvasEl.getContext('2d');
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  draw();
+  mCanvas.style.width = w + 'px'; mCanvas.style.height = h + 'px';
+  mCanvas.width = w * dpr; mCanvas.height = h * dpr;
+  mCtx = mCanvas.getContext('2d'); mCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  mW = w; mH = h;
+  if (!view.ready) fitView();
+  drawMosaic();
 }
 
-function draw() {
-  if (!ctx) return;
-  const size = gridN * cell;
-  ctx.clearRect(0, 0, size, size);
-  // white board
-  ctx.fillStyle = '#f4f4f2';
-  ctx.fillRect(0, 0, size, size);
-  // pixels
-  for (const [k, p] of pixels) {
-    const [x, y] = k.split(',').map(Number);
-    ctx.fillStyle = p.color;
-    ctx.fillRect(x * cell, y * cell, cell, cell);
-    if (p.uid === userId()) { // always see yours
-      ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = 1.5;
-      ctx.strokeRect(x * cell + 1, y * cell + 1, cell - 2, cell - 2);
-    }
+// Fit the whole mosaic into the viewport (used on load and by the ⤢ button).
+function fitView() {
+  const cols = mosaicCols();
+  const rows = Math.max(1, Math.ceil(Math.max(1, tiles.size) / cols));
+  const worldW = cols * TW, worldH = rows * TW;
+  view.scale = clamp(Math.min(mW / worldW, mH / worldH) * 0.92, 0.15, 4);
+  view.ox = (mW - worldW * view.scale) / 2;
+  view.oy = (mH - worldH * view.scale) / 2;
+  view.ready = true;
+}
+
+function drawMosaic() {
+  if (!mCtx) return;
+  mCtx.clearRect(0, 0, mW, mH);
+  mCtx.fillStyle = '#0d0d11'; mCtx.fillRect(0, 0, mW, mH);
+  const ids = orderedIds();
+  const cols = mosaicCols();
+  const s = view.scale, size = TW * s, cell = size / TILE;
+  ids.forEach((uid, i) => {
+    const wx = (i % cols) * TW, wy = Math.floor(i / cols) * TW;
+    const sx = wx * s + view.ox, sy = wy * s + view.oy;
+    if (sx > mW || sy > mH || sx + size < 0 || sy + size < 0) return; // cull off-screen
+    mCtx.fillStyle = '#f4f4f2'; mCtx.fillRect(sx + 1, sy + 1, size - 2, size - 2);
+    for (const [k, px] of tiles.get(uid).cells) { const [x, y] = k.split(',').map(Number); mCtx.fillStyle = px.color; mCtx.fillRect(sx + x * cell, sy + y * cell, cell + 0.5, cell + 0.5); }
+    if (uid === selectedUid) { mCtx.strokeStyle = '#FFD600'; mCtx.lineWidth = 3; mCtx.strokeRect(sx + 1.5, sy + 1.5, size - 3, size - 3); }
+    else if (uid === userId()) { mCtx.strokeStyle = 'rgba(255,214,0,.7)'; mCtx.lineWidth = 2; mCtx.strokeRect(sx + 1, sy + 1, size - 2, size - 2); }
+  });
+  updateStats();
+}
+
+// --- Map navigation: pan (drag) + pinch-zoom, tap to select a tile ---
+function pinchInfo() {
+  const [a, b] = [...ptrs.values()];
+  return { dist: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
+}
+function onPtrDown(e) {
+  mCanvas.setPointerCapture?.(e.pointerId);
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (ptrs.size === 1) { panStart = { x: e.clientX, y: e.clientY, ox: view.ox, oy: view.oy }; moved = false; }
+  else if (ptrs.size === 2) { const p = pinchInfo(); pinchStart = { ...p, scale: view.scale, ox: view.ox, oy: view.oy }; }
+}
+function onPtrMove(e) {
+  if (!ptrs.has(e.pointerId)) return;
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (ptrs.size >= 2 && pinchStart) {
+    const p = pinchInfo();
+    const k = clamp(pinchStart.scale * (p.dist / pinchStart.dist), 0.12, 6);
+    const wx = (pinchStart.cx - pinchStart.ox) / pinchStart.scale;
+    const wy = (pinchStart.cy - pinchStart.oy) / pinchStart.scale;
+    view.scale = k; view.ox = p.cx - wx * k; view.oy = p.cy - wy * k;
+    drawMosaic();
+  } else if (panStart) {
+    const dx = e.clientX - panStart.x, dy = e.clientY - panStart.y;
+    if (Math.abs(dx) + Math.abs(dy) > 6) moved = true;
+    view.ox = panStart.ox + dx; view.oy = panStart.oy + dy;
+    drawMosaic();
   }
-  // grid lines
-  ctx.strokeStyle = 'rgba(0,0,0,.06)'; ctx.lineWidth = 1;
-  for (let i = 1; i < gridN; i++) {
-    ctx.beginPath(); ctx.moveTo(i * cell, 0); ctx.lineTo(i * cell, size); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(size, i * cell); ctx.stroke();
+}
+function onPtrUp(e) {
+  const had = ptrs.get(e.pointerId);
+  ptrs.delete(e.pointerId);
+  if (ptrs.size < 2) pinchStart = null;
+  if (ptrs.size === 0) {
+    if (!moved && had) selectAt(had.x, had.y);
+    panStart = null;
+  } else if (ptrs.size === 1) {
+    const [only] = [...ptrs.values()]; panStart = { x: only.x, y: only.y, ox: view.ox, oy: view.oy };
   }
-  // selected (picked-up) pixel ring
-  if (selected) {
-    ctx.strokeStyle = '#FFD600'; ctx.lineWidth = 3;
-    ctx.strokeRect(selected.x * cell + 1.5, selected.y * cell + 1.5, cell - 3, cell - 3);
+}
+function selectAt(clientX, clientY) {
+  const rect = mCanvas.getBoundingClientRect();
+  const wx = (clientX - rect.left - view.ox) / view.scale;
+  const wy = (clientY - rect.top - view.oy) / view.scale;
+  const cols = mosaicCols();
+  const col = Math.floor(wx / TW), row = Math.floor(wy / TW);
+  if (col < 0 || row < 0 || col >= cols) { selectedUid = null; drawMosaic(); updateSelBar(); return; }
+  const i = row * cols + col;
+  const ids = orderedIds();
+  selectedUid = (i >= 0 && i < ids.length) ? ids[i] : null;
+  drawMosaic(); updateSelBar();
+}
+function zoomBy(f) {
+  const k = clamp(view.scale * f, 0.12, 6);
+  const cx = mW / 2, cy = mH / 2;
+  const wx = (cx - view.ox) / view.scale, wy = (cy - view.oy) / view.scale;
+  view.scale = k; view.ox = cx - wx * k; view.oy = cy - wy * k;
+  drawMosaic();
+}
+
+function updateSelBar() {
+  const bar = el('#px-sel'); if (!bar) return;
+  bar.innerHTML = '';
+  if (!selectedUid) { bar.appendChild(h('span', { class: 'icc-muted small' }, L('mosaicHint'))); return; }
+  const mine = selectedUid === userId();
+  const count = likeCount.get(selectedUid) || 0;
+  const liked = myLikes.has(selectedUid);
+  bar.appendChild(h('span', { class: 'icc-sel-info' }, `❤️ ${count} ${L('tileLikes')}`));
+  if (mine) {
+    const b = h('button', { class: 'icc-btn icc-btn-sm' }, L('myTile'));
+    b.addEventListener('click', openEditor); bar.appendChild(b);
+  } else {
+    const b = h('button', { class: 'icc-btn icc-btn-sm' + (liked ? ' ghost' : '') }, liked ? '💔' : '❤️ Like');
+    b.addEventListener('click', async () => {
+      b.disabled = true;
+      if (liked) { await unlikeTile(chatRef.id, selectedUid); myLikes.delete(selectedUid); likeCount.set(selectedUid, Math.max(0, count - 1)); }
+      else { await likeTile(chatRef.id, selectedUid); myLikes.add(selectedUid); likeCount.set(selectedUid, count + 1); }
+      updateSelBar();
+    });
+    bar.appendChild(b);
   }
 }
 
-async function onTap(e) {
-  const rect = canvasEl.getBoundingClientRect();
-  const x = Math.floor((e.clientX - rect.left) / cell);
-  const y = Math.floor((e.clientY - rect.top) / cell);
-  if (x < 0 || y < 0 || x >= gridN || y >= gridN) return;
-  const here = pixels.get(key(x, y));
+function updateStats(online) {
+  const s = el('#px-stats'); if (!s) return;
+  if (online != null) s.dataset.on = String(online);
+  const on = Number(s.dataset.on || 0);
+  s.textContent = `${tiles.size} ${L('tilesCount')}` + (on ? ` · ⚡ ${on}` : '');
+}
 
-  if (selected) {
-    if (here && here.id === selected.id) {
-      // tapped the picked-up pixel again: remove it if it's mine, else just drop
-      if (here.uid === userId()) { pixels.delete(key(x, y)); refresh(); await removePixel(here.id); }
-      selected = null; draw();
+// ---------- Tile editor ----------
+function openEditor() {
+  const t = tileOf(userId());
+  let color = PALETTE[2], erase = false;
+  const cv = h('canvas', { class: 'icc-ed-canvas' });
+  const palette = h('div', { class: 'icc-px-palette' });
+  const swatches = [];
+  PALETTE.forEach((c) => {
+    const sw = h('button', { class: 'icc-px-color' + (c === color ? ' sel' : ''), style: `background:${c}` });
+    sw.addEventListener('click', () => { color = c; erase = false; swatches.forEach((n) => n.classList.remove('sel')); sw.classList.add('sel'); eraserBtn.classList.remove('sel'); });
+    swatches.push(sw); palette.appendChild(sw);
+  });
+  const eraserBtn = h('button', { class: 'icc-px-color icc-eraser' }, '🩹');
+  eraserBtn.addEventListener('click', () => { erase = true; swatches.forEach((n) => n.classList.remove('sel')); eraserBtn.classList.add('sel'); });
+  palette.appendChild(eraserBtn);
+
+  const body = h('div', { class: 'icc-editor' }, [h('div', { class: 'icc-ed-wrap' }, [cv]), palette]);
+  const onClose = () => { window.removeEventListener('resize', sizeEd); drawMosaic(); };
+  const m = modal('🎨 ' + L('editorTitle'), body, onClose);
+  m.overlay.querySelector('.icc-modal-head strong').after(h('button', { class: 'icc-btn icc-btn-sm icc-ed-done' }, L('editDone')));
+  m.overlay.querySelector('.icc-ed-done')?.addEventListener('click', m.close);
+
+  let ectx, ecell, edisp;
+  const sizeEd = () => {
+    // Adapt to the smartphone display (fits width and height).
+    const avail = Math.min(m.overlay.querySelector('.icc-modal').clientWidth - 32, window.innerHeight * 0.52, 380);
+    edisp = Math.max(160, avail);
+    const r = Math.min(window.devicePixelRatio || 1, 2);
+    cv.style.width = edisp + 'px'; cv.style.height = edisp + 'px';
+    cv.width = edisp * r; cv.height = edisp * r;
+    ectx = cv.getContext('2d'); ectx.setTransform(r, 0, 0, r, 0, 0);
+    ecell = edisp / TILE; drawEd();
+  };
+  const drawEd = () => {
+    ectx.clearRect(0, 0, edisp, edisp);
+    ectx.fillStyle = '#f4f4f2'; ectx.fillRect(0, 0, edisp, edisp);
+    for (const [k, px] of t.cells) { const [x, y] = k.split(',').map(Number); ectx.fillStyle = px.color; ectx.fillRect(x * ecell, y * ecell, ecell, ecell); }
+    ectx.strokeStyle = 'rgba(0,0,0,.12)'; ectx.lineWidth = 1;
+    for (let i = 1; i < TILE; i++) { ectx.beginPath(); ectx.moveTo(i * ecell, 0); ectx.lineTo(i * ecell, edisp); ectx.stroke(); ectx.beginPath(); ectx.moveTo(0, i * ecell); ectx.lineTo(edisp, i * ecell); ectx.stroke(); }
+  };
+  const tap = async (e) => {
+    const rect = cv.getBoundingClientRect();
+    const x = Math.floor((e.clientX - rect.left) / ecell), y = Math.floor((e.clientY - rect.top) / ecell);
+    if (x < 0 || y < 0 || x >= TILE || y >= TILE) return;
+    const k = key(x, y), existing = t.cells.get(k);
+    if (erase || (existing && existing.color === color)) {
+      if (existing) { t.cells.delete(k); drawEd(); drawMosaic(); await removePixel(existing.id); }
       return;
     }
-    if (here) { selected = { id: here.id, x, y, uid: here.uid }; draw(); return; } // switch selection
-    // Moving someone else's pixel is allowed but rate-limited (build, don't grief).
-    if (selected.uid !== userId()) {
-      const wait = FOREIGN_COOLDOWN - (Date.now() - lastForeignMove);
-      if (wait > 0) { toast(L('moveWait').replace('{s}', Math.ceil(wait / 1000)), 'info'); return; }
-      lastForeignMove = Date.now();
-    }
-    // move selected pixel to empty cell (optimistic)
-    const from = selected;
-    const p = pixels.get(key(from.x, from.y));
-    if (p) { pixels.delete(key(from.x, from.y)); pixels.set(key(x, y), p); }
-    selected = null; refresh();
-    const { error } = await movePixel(from.id, x, y);
-    if (error) { toast(L('cellTaken'), 'error'); }
-    return;
-  }
-
-  if (here) { selected = { id: here.id, x, y, uid: here.uid }; draw(); return; } // pick up any pixel
-
-  // place a new pixel of my color
-  if (budgetLeft() <= 0) { toast(L('pixFull'), 'info'); return; }
-  const tempId = 'tmp-' + x + '-' + y;
-  pixels.set(key(x, y), { id: tempId, color, uid: userId() });
-  refresh();
-  const { pixel, error } = await placePixel(chatRef.id, x, y, color);
-  if (error) { pixels.delete(key(x, y)); refresh(); toast(L('cellTaken'), 'error'); }
-  else if (pixel) pixels.set(key(x, y), { id: pixel.id, color: pixel.color, uid: pixel.user_id });
+    if (existing) { existing.color = color; drawEd(); drawMosaic(); await recolorPixel(existing.id, color); return; }
+    const tmp = { id: 'tmp', color }; t.cells.set(k, tmp); drawEd(); drawMosaic();
+    const { pixel, error } = await placePixel(chatRef.id, x, y, color);
+    if (error) { t.cells.delete(k); drawEd(); drawMosaic(); }
+    else if (pixel) t.cells.set(k, { id: pixel.id, color: pixel.color });
+  };
+  cv.addEventListener('pointerdown', tap);
+  window.addEventListener('resize', sizeEd);
+  setTimeout(sizeEd, 30);
 }
 
-function updateBar(online) {
-  const b = el('#px-budget');
-  if (b) {
-    const left = budgetLeft();
-    b.innerHTML = `🎨 <b>${left}/${BUDGET}</b> ${L('pixLeft')}`;
-  }
-  const s = el('#px-stats');
-  if (s) {
-    const on = online != null ? online : (Number((s.dataset.on) || 0));
-    if (online != null) s.dataset.on = String(online);
-    s.textContent = `${gridN}×${gridN} · ${pixels.size} ${L('pixPlaced')}` + (on ? ` · ⚡ ${on}` : '');
-  }
-}
-
-// Share the current canvas as an image (call for help).
-async function shareCanvas() {
+// ---------- Share the mosaic as an image ----------
+async function shareMosaic() {
   toast(L('shareStory') + '…', 'info');
-  const S = 1080, pad = 60, board = S - pad * 2, c = board / gridN;
-  const cv = document.createElement('canvas'); cv.width = S; cv.height = S + 120;
+  const ids = orderedIds();
+  const n = Math.max(1, ids.length);
+  const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
+  const S = 1080, pad = 40, board = S - pad * 2, ts = board / cols, cell = ts / TILE;
+  const cv = document.createElement('canvas'); cv.width = S; cv.height = S + 130;
   const x = cv.getContext('2d');
   x.fillStyle = '#0d0d11'; x.fillRect(0, 0, cv.width, cv.height);
-  x.fillStyle = '#f4f4f2'; x.fillRect(pad, pad, board, board);
-  for (const [k, p] of pixels) { const [px, py] = k.split(',').map(Number); x.fillStyle = p.color; x.fillRect(pad + px * c, pad + py * c, c, c); }
+  ids.forEach((uid, i) => {
+    const ox = pad + (i % cols) * ts, oy = pad + Math.floor(i / cols) * ts;
+    x.fillStyle = '#f4f4f2'; x.fillRect(ox + 1, oy + 1, ts - 2, ts - 2);
+    for (const [k, px] of tiles.get(uid).cells) { const [cx, cy] = k.split(',').map(Number); x.fillStyle = px.color; x.fillRect(ox + cx * cell, oy + cy * cell, cell, cell); }
+  });
   x.textAlign = 'center'; x.fillStyle = '#FFD600'; x.font = 'bold 46px sans-serif';
-  x.fillText('⚡ Pixel Art · InstantCrowdArt', S / 2, S + 40);
+  x.fillText('🧩 ' + (chatRef.title || 'Pixel Art') + ' · InstantCrowdArt', S / 2, S + 44);
   x.fillStyle = '#fff'; x.font = 'bold 40px sans-serif';
-  x.fillText(L('shareCta') + ' ' + (chatRef.short_code || 'FOUND1'), S / 2, S + 95);
+  x.fillText(L('shareCta') + ' ' + (chatRef.short_code || 'FOUND1'), S / 2, S + 100);
 
   const url = joinUrl(chatRef.short_code) + '?r=' + (userId() || '');
   const text = L('shareText');
   const blob = await new Promise((r) => cv.toBlob(r, 'image/png'));
   try {
-    const file = new File([blob], 'pixelart.png', { type: 'image/png' });
+    const file = new File([blob], 'mosaic.png', { type: 'image/png' });
     if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text, url }); return; }
     window.open(URL.createObjectURL(blob), '_blank');
     try { await navigator.clipboard.writeText(`${text}\n${url}`); toast(L('copied'), 'ok'); } catch { /* ignore */ }
   } catch { /* cancelled */ }
 }
 
-// Info: current game rules + a shortcut to propose changing them.
+// ---------- Rules ----------
 function showRules() {
   const list = h('ul', { class: 'icc-legal-list' }, L('rules').map((r) => h('li', {}, r)));
   const cta = h('button', { class: 'icc-btn' }, L('proposeChange'));
   const m = modal('ℹ️ ' + L('rulesTitle'), h('div', { class: 'icc-legal' }, [
-    list,
-    h('p', { class: 'icc-muted small', style: 'margin-top:12px' }, L('rulesCta')),
+    list, h('p', { class: 'icc-muted small', style: 'margin-top:12px' }, L('rulesCta')),
     h('div', { style: 'padding:8px 0 4px' }, cta),
   ]));
   cta.addEventListener('click', () => { m.close(); openFeedbackFlow(); });
 }
 
 function cleanup() {
-  clearInterval(timer);
-  clearInterval(pollTimer);
-  unsubscribePixels();
-  unsubscribePresence();
-  window.removeEventListener('resize', sizeCanvas);
-  pixels.clear(); selected = null; ctx = null; canvasEl = null; chatRef = null;
+  clearInterval(timer); clearInterval(pollTimer);
+  unsubscribePixels(); unsubscribePresence();
+  window.removeEventListener('resize', sizeMosaic);
+  tiles.clear(); likeCount.clear(); myLikes.clear(); selectedUid = null;
+  mCtx = null; mCanvas = null; chatRef = null;
   document.querySelectorAll('.icc-fab, .icc-admin-fab').forEach((n) => n.remove());
 }

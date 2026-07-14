@@ -24,16 +24,17 @@ export function escapeHtml(s) {
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-// Countdown formatting from an expires_at ISO string.
+// Countdown formatting from an expires_at ISO string (days-aware).
 export function formatRemaining(expiresAt) {
   if (!expiresAt) return '∞';
   const ms = new Date(expiresAt).getTime() - Date.now();
   if (ms <= 0) return '00:00:00';
   const s = Math.floor(ms / 1000);
-  const hh = String(Math.floor(s / 3600)).padStart(2, '0');
+  const days = Math.floor(s / 86400);
+  const hh = String(Math.floor((s % 86400) / 3600)).padStart(2, '0');
   const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
   const ss = String(s % 60).padStart(2, '0');
-  return `${hh}:${mm}:${ss}`;
+  return days > 0 ? `${days}d ${hh}:${mm}:${ss}` : `${hh}:${mm}:${ss}`;
 }
 
 export function isExpired(expiresAt) {

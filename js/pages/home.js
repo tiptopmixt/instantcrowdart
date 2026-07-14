@@ -102,21 +102,27 @@ export async function renderHome(root) {
     });
     updateTicker(chat, 0, []);
 
-    // live mini-preview of the actual pixel canvas
+    // live mini-preview of the tile mosaic
+    const TILE = 16;
     const drawPreview = async () => {
       const cv = el('#peek-canvas');
       if (!cv) return;
       const px = await getPixels(chat.id);
-      let grid = 16;
-      while (grid < 64 && px.length / (grid * grid) > 0.5) grid += 2;
-      let maxc = 0; for (const p of px) maxc = Math.max(maxc, p.x, p.y);
-      while (grid <= maxc && grid < 64) grid += 2;
+      const byUser = new Map();
+      px.forEach((p) => { if (!byUser.has(p.user_id)) byUser.set(p.user_id, []); byUser.get(p.user_id).push(p); });
+      const ids = [...byUser.keys()];
+      const n = Math.max(1, ids.length);
+      const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
       const disp = cv.clientWidth || 300, ratio = Math.min(window.devicePixelRatio || 1, 2);
       cv.width = disp * ratio; cv.height = disp * ratio;
       const cx = cv.getContext('2d'); cx.setTransform(ratio, 0, 0, ratio, 0, 0);
-      const cellPx = disp / grid;
-      cx.fillStyle = '#f4f4f2'; cx.fillRect(0, 0, disp, disp);
-      for (const p of px) { cx.fillStyle = p.color; cx.fillRect(p.x * cellPx, p.y * cellPx, cellPx, cellPx); }
+      cx.fillStyle = '#0d0d11'; cx.fillRect(0, 0, disp, disp);
+      const ts = disp / cols, cell = ts / TILE;
+      ids.forEach((uid, i) => {
+        const ox = (i % cols) * ts, oy = Math.floor(i / cols) * ts;
+        cx.fillStyle = '#f4f4f2'; cx.fillRect(ox + 1, oy + 1, ts - 2, ts - 2);
+        byUser.get(uid).forEach((p) => { cx.fillStyle = p.color; cx.fillRect(ox + p.x * cell, oy + p.y * cell, cell, cell); });
+      });
     };
     drawPreview();
     ghostTimer = setInterval(drawPreview, 4000);
@@ -136,6 +142,8 @@ function countdownBlock(chat) {
     h('div', { class: 'lab' }, lab),
   ]);
   return h('div', { class: 'icc-count2' }, [
+    cell('cd-d', L('labDays')),
+    h('span', { class: 'colon' }, ':'),
     cell('cd-h', L('labHrs')),
     h('span', { class: 'colon' }, ':'),
     cell('cd-m', L('labMin')),
@@ -149,7 +157,8 @@ function tickCountdown(chat) {
   const ms = Math.max(0, new Date(chat.expires_at).getTime() - Date.now());
   const s = Math.floor(ms / 1000);
   const set = (id, v) => { const n = el('#' + id); if (n && n.textContent !== v) n.textContent = v; };
-  set('cd-h', String(Math.floor(s / 3600)).padStart(2, '0'));
+  set('cd-d', String(Math.floor(s / 86400)));
+  set('cd-h', String(Math.floor((s % 86400) / 3600)).padStart(2, '0'));
   set('cd-m', String(Math.floor((s % 3600) / 60)).padStart(2, '0'));
   set('cd-s', String(s % 60).padStart(2, '0'));
 }
