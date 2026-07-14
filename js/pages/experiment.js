@@ -1,12 +1,13 @@
 // Pixel Art — the shared canvas experiment. Everyone gets 10 pixels to place
 // anywhere (any color), can move ANY pixel (yours or others'), sees the picture
 // grow live, and shares the creation. No names, no AI at the center.
-import { h, el, toast, formatRemaining, isExpired, joinUrl } from '../utils.js';
+import { h, el, toast, formatRemaining, joinUrl } from '../utils.js';
 import { L } from '../locale.js';
 import { requireConsent } from '../legal.js';
 import { getChatByCode, getMyProfile, joinChat, getPixels, placePixel, movePixel, removePixel } from '../data.js';
 import { subscribePixels, unsubscribePixels, subscribePresence, unsubscribePresence } from '../realtime.js';
 import { adsBanner, openFeedbackFlow, openAdminPanel, modal } from '../components.js';
+import { callFn } from '../supabase.js';
 import { userId } from '../auth.js';
 import { isAdmin } from '../config.js';
 import { navigate } from '../router.js';
@@ -37,6 +38,7 @@ function refresh(online) {
 }
 
 let timer = null;
+let pollTimer = null;
 let ctx = null, canvasEl = null, cell = 0, dpr = 1;
 const pixels = new Map();       // "x,y" -> { id, color, uid }
 let selected = null;            // { id, x, y } picked up to move
@@ -53,11 +55,13 @@ export async function renderExperiment(root, code) {
   if (!chat) { navigate('/'); return; }
   chatRef = chat;
 
-  // Consent + join (for presence). Language already chosen at the gate.
+  // Consent + join. A NEW joiner (re)starts the 24h countdown for everyone.
   if (!(await getMyProfile(chat.id))) {
     const ok = await requireConsent();
     if (!ok) { navigate('/'); return; }
     await joinChat(chat.id, uiLang());
+    const { data } = await callFn('icc-timer', { chat_id: chat.id });
+    if (data?.expires_at) chat.expires_at = data.expires_at;
   }
 
   root.innerHTML = '';
@@ -65,7 +69,7 @@ export async function renderExperiment(root, code) {
 
   // Top bar
   const countdown = h('span', { class: 'icc-mini-count', id: 'px-count' },
-    chat.status === 'founding' ? '∞' : formatRemaining(chat.expires_at));
+    chat.expires_at ? formatRemaining(chat.expires_at) : '∞');
   const shareBtn = h('button', { class: 'icc-share-cta' }, ['📤 ', L('share')]);
   shareBtn.addEventListener('click', shareCanvas);
   const tools = [];
@@ -81,7 +85,7 @@ export async function renderExperiment(root, code) {
   ]));
 
   // Fuse
-  page.appendChild(h('div', { class: 'icc-fuse' + (chat.status === 'founding' ? ' infinite' : '') }, [
+  page.appendChild(h('div', { class: 'icc-fuse' + (chat.expires_at ? '' : ' infinite') }, [
     h('div', { class: 'icc-fuse-fill', id: 'px-fuse' }, [h('span', { class: 'icc-fuse-spark' })]),
   ]));
 
@@ -142,18 +146,27 @@ export async function renderExperiment(root, code) {
   });
   subscribePresence(chat.id, (count) => { refresh(count); });
 
-  // Countdown + fuse
+  // Countdown + fuse (the 24h window; restarts when a new user joins).
+  const WINDOW = 24 * 3600 * 1000;
   timer = setInterval(() => {
+    if (!chat.expires_at) return;
     const c = el('#px-count');
-    if (c && chat.status !== 'founding') c.textContent = formatRemaining(chat.expires_at);
+    if (c) c.textContent = formatRemaining(chat.expires_at);
     const ff = el('#px-fuse');
-    if (ff && chat.status !== 'founding' && chat.expires_at) {
-      const total = new Date(chat.expires_at).getTime() - new Date(chat.created_at).getTime();
+    if (ff) {
       const left = new Date(chat.expires_at).getTime() - Date.now();
-      if (total > 0) ff.style.width = Math.max(0, Math.min(100, (left / total) * 100)) + '%';
+      ff.style.width = Math.max(0, Math.min(100, (left / WINDOW) * 100)) + '%';
     }
-    if (chat.status !== 'founding' && isExpired(chat.expires_at)) { clearInterval(timer); }
   }, 1000);
+
+  // Pick up expires_at refreshes from other people joining (poll lightly).
+  pollTimer = setInterval(async () => {
+    const { chat: fresh } = await getChatByCode(chat.short_code);
+    if (fresh?.expires_at && fresh.expires_at !== chat.expires_at) {
+      chat.expires_at = fresh.expires_at;
+      el('.icc-fuse')?.classList.remove('infinite');
+    }
+  }, 20000);
 }
 
 function sizeCanvas() {
@@ -296,6 +309,7 @@ function showRules() {
 
 function cleanup() {
   clearInterval(timer);
+  clearInterval(pollTimer);
   unsubscribePixels();
   unsubscribePresence();
   window.removeEventListener('resize', sizeCanvas);

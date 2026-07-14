@@ -125,7 +125,7 @@ export async function renderHome(root) {
 
 // ---------- countdown ----------
 function countdownBlock(chat) {
-  if (chat.status === 'founding' || !chat.expires_at) {
+  if (!chat.expires_at) {
     return h('div', { class: 'icc-forever' }, [
       h('span', { class: 'icc-forever-flame' }, '∞'),
       h('span', { class: 'icc-forever-lab' }, L('liveForever')),
@@ -145,7 +145,7 @@ function countdownBlock(chat) {
 }
 
 function tickCountdown(chat) {
-  if (chat.status === 'founding' || !chat.expires_at) return;
+  if (!chat.expires_at) return;
   const ms = Math.max(0, new Date(chat.expires_at).getTime() - Date.now());
   const s = Math.floor(ms / 1000);
   const set = (id, v) => { const n = el('#' + id); if (n && n.textContent !== v) n.textContent = v; };
