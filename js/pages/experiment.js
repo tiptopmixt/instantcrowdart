@@ -80,7 +80,9 @@ export async function renderExperiment(root, code) {
   const zin = h('button', { class: 'icc-map-btn' }, '＋'); zin.addEventListener('click', () => zoomBy(1.3));
   const zout = h('button', { class: 'icc-map-btn' }, '−'); zout.addEventListener('click', () => zoomBy(1 / 1.3));
   const zfit = h('button', { class: 'icc-map-btn' }, '⤢'); zfit.addEventListener('click', () => { fitView(); drawMosaic(); });
-  page.appendChild(h('div', { class: 'icc-map-wrap' }, [mCanvas, h('div', { class: 'icc-map-ctrl' }, [zin, zout, zfit])]));
+  // Fixed pixel height (computed once) so the mobile URL bar can't resize/shake it.
+  const mapH = Math.max(300, Math.round((window.innerHeight || 640) * 0.5));
+  page.appendChild(h('div', { class: 'icc-map-wrap', style: `height:${mapH}px` }, [mCanvas, h('div', { class: 'icc-map-ctrl' }, [zin, zout, zfit])]));
 
   // Selection bar (like / edit for the tapped tile)
   page.appendChild(h('div', { class: 'icc-px-sel', id: 'px-sel' }));
@@ -147,9 +149,13 @@ function applyPixel(p) {
   const ts = new Date(p.created_at || Date.now()).getTime(); if (ts < t.first) t.first = ts;
 }
 
+let lastMW = 0;
 function sizeMosaic() {
   if (!mCanvas) return;
   const w = mCanvas.parentElement.clientWidth;
+  // Ignore height-only changes (mobile URL bar show/hide) so the map never trembles.
+  if (mCtx && w === lastMW) return;
+  lastMW = w;
   const h = mCanvas.parentElement.clientHeight || Math.round(window.innerHeight * 0.5);
   dpr = Math.min(window.devicePixelRatio || 1, 2);
   mCanvas.style.width = w + 'px'; mCanvas.style.height = h + 'px';
@@ -296,8 +302,7 @@ function openEditor() {
   palette.appendChild(eraserBtn);
 
   const body = h('div', { class: 'icc-editor' }, [h('div', { class: 'icc-ed-wrap' }, [cv]), palette]);
-  const onClose = () => { window.removeEventListener('resize', sizeEd); drawMosaic(); };
-  const m = modal('🎨 ' + L('editorTitle'), body, onClose);
+  const m = modal('🎨 ' + L('editorTitle'), body, () => drawMosaic());
   m.overlay.querySelector('.icc-modal-head strong').after(h('button', { class: 'icc-btn icc-btn-sm icc-ed-done' }, L('editDone')));
   m.overlay.querySelector('.icc-ed-done')?.addEventListener('click', m.close);
 
@@ -335,7 +340,6 @@ function openEditor() {
     else if (pixel) t.cells.set(k, { id: pixel.id, color: pixel.color });
   };
   cv.addEventListener('pointerdown', tap);
-  window.addEventListener('resize', sizeEd);
   setTimeout(sizeEd, 30);
 }
 
